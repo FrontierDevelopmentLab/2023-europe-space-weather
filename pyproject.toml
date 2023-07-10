@@ -1,0 +1,46 @@
+[project]
+name = "icarus"
+description = "FDL 2023 Helio Onboard"
+version = "0.1.0"
+authors = [
+    { name = "", email = "user@example.com" }
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+    "coverage-badge"
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.pylint.MASTER]
+py-version = "3.10"
+jobs = 2
+load-plugins = ["pylint.extensions.docparams", "pylint.extensions.typing"]
+disable = ["line-too-long"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "-x",
+    "--junitxml=reports/junit/junit.xml",
+    "--cov=tcd_pipeline",
+    "--color=yes",
+    "--verbose",
+    "--durations=0"
+]
+testpaths = [
+    "tests/unit",
+    "tests/integration",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]
