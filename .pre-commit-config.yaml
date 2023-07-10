@@ -1,5 +1,15 @@
 repos:
 
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=256]
+      - id: end-of-file-fixer
+      - id: detect-private-key
+      - id: trailing-whitespace
+      - id: check-yaml
+
   - repo: https://github.com/psf/black
     rev: 22.10.0
     hooks:
