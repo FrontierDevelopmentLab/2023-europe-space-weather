@@ -3,6 +3,10 @@
 
 ## Development Instructions
 
+### Notes
+
+This setup is designed to work cleanly in a shared system. On your own machine, you can probably get away with using `conda`/`mamba` or a similar package manager. Instructions below assume a Linux VM, but once you've got `pyenv` installed they should work on any system.
+
 ### Install pyenv
 
 First, get any system dependencies
