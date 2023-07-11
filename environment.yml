@@ -1,0 +1,29 @@
+name: helio23
+channels:
+    - conda-forge
+    - nvidia
+dependencies:
+    - python=3.10
+    - numpy
+    - opencv
+    - h5py
+    - pandas
+    - glob2
+    - pathlib
+    - matplotlib
+    - tensorflow-datasets
+    - wandb
+    - pytorch
+    - torchvision
+    - torchaudio 
+    - pytorch-cuda=11.7
+    - pytorch-lightning
+    - rich
+    - scipy
+    - ipython
+    - spyder
+    - jupyter
+    - ipywidgets
+    - scikit-learn
+    - keras
+    
