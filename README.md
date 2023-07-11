@@ -3,14 +3,54 @@
 
 ## Development Instructions
 
-### Setup environment
+### Install pyenv
 
-This doesn't exist yet.
+First, get any system dependencies
 
 ```bash
-conda create -f environment.yml
-conda activate helio23
-pip install -e .
+sudo apt-get update; sudo apt-get install make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+```
+
+Then install pyenv:
+
+```bash
+curl https://pyenv.run | bash
+```
+
+Add the following to your `.bashrc`:
+
+```bash
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+```
+
+Restart your shell, or source your `~/.bashrc` file and create your environment:
+
+```bash
+pyenv create 3.10 onboard
+```
+
+Change directory to here, and:
+
+```bash
+pyenv local onboard
+```
+
+This will automatically activate the `onboard` environment when you change to the repository folder.
+
+### Install `icarus`
+
+With the env installed, you can install the module:
+
+```bash
+pip install -e .[onboard,ttest]
+
+# or 
+
+pip install -e .[ground,test]
 ```
 
 Using `-e` will make an editable install so that changes to the package will be immediately reflected in your scripts/notebooks (when you restart the kernel).
@@ -33,3 +73,9 @@ It's normal for pre-commit to fail if it fixes something. Usually the problem wi
 pip install pytest pytest-cov
 python -m pytest test
 ```
+
+### Specify new dependencies
+
+Dependencies are specified in the `pyproject` file. Only add dependencies which are required by the project to avoid bloated environments. Add _universal_ dependencies (like Pytorch) in the `[project]` section.
+
+Add optional dependencies for the different toolsets in `[project.optional-dependencies]`.
