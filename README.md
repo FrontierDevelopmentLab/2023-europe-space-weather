@@ -27,10 +27,17 @@ eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 ```
 
+Disable Conda's auto-start:
+
+```bash
+conda config --set auto_activate_base false
+```
+
 Restart your shell, or source your `~/.bashrc` file and create your environment:
 
 ```bash
-pyenv create 3.10 onboard
+pyenv install 3.10
+pyenv virtualenv 3.10 onboard
 ```
 
 Change directory to here, and:
