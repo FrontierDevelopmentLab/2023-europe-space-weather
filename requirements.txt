@@ -1,0 +1,3 @@
+sunpy[all]
+wandb
+pytorch-lightning
