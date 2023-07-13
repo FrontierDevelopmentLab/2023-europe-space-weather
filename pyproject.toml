@@ -5,6 +5,9 @@ version = "0.1.0"
 authors = [
     { name = "", email = "user@example.com" }
 ]
+dependencies = [
+    "torch>=2.0"
+]
 
 [project.optional-dependencies]
 test = [
@@ -12,6 +15,13 @@ test = [
     "pytest-cov",
     "coverage-badge"
 ]
+onboard = [
+    "openvino"
+]
+ground = [
+    "sunpy"
+]
+
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -32,14 +42,14 @@ disable = ["line-too-long"]
 addopts = [
     "-x",
     "--junitxml=reports/junit/junit.xml",
-    "--cov=tcd_pipeline",
+    "--cov=icarus",
     "--color=yes",
     "--verbose",
     "--durations=0"
 ]
 testpaths = [
-    "tests/unit",
-    "tests/integration",
+    "test/unit",
+    "test/integration",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning"
