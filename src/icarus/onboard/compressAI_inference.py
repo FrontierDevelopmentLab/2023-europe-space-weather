@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
     x = transforms.ToTensor()(img_data_normalised).unsqueeze(0).to(device)
     print(x.shape)
+    print(x.nelement())  # 786432
 
     plotname = os.path.join(plot_dir, "secchi_1.png")
     plt.figure(figsize=(12, 9))
@@ -61,6 +62,14 @@ if __name__ == "__main__":
     print(out_net.keys())
 
     rec_net = transforms.ToPILImage()(out_net["x_hat"].squeeze().cpu())
+
+    plotname = os.path.join(plot_dir, "secchi_rec.png")
+    plt.figure(figsize=(12, 9))
+    plt.axis("off")
+    plt.imshow(rec_net)
+    plt.show()
+    plt.savefig(plotname)
+
 
     diff = torch.mean((out_net["x_hat"] - x).abs(), axis=1).squeeze().cpu()
 
@@ -77,9 +86,11 @@ if __name__ == "__main__":
     axes[2].imshow(diff, cmap="viridis")
     axes[2].title.set_text("Difference")
 
-    plotname = os.path.join(plot_dir, "secchi_2.png")
-    plt.show()
-    plt.savefig(plotname)
+    # plotname = os.path.join(plot_dir, "secchi_2.png")
+    # plt.show()
+    # plt.savefig(plotname)
+
+    # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
 
     def compute_psnr(a, b):
         mse = torch.mean((a - b) ** 2).item()
