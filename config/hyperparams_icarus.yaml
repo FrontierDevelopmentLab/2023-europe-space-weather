@@ -1,0 +1,3 @@
+Data:
+  data_sim_type : 'hao' # simulated data (psi or hao)
+  data_path : '/mnt/ground-data/data_fits/dcmer_0000_bang_0000_pB'
