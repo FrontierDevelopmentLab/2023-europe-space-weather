@@ -10,125 +10,14 @@ from sunerf.train.sampling import sample_hierarchical
 from sunerf.train.sampling import sample_non_uniform_box
 
 
-class VolumeRender():
-	def __init__(self, aia_response_path='', maximum_AIA_intensity=1, density_normalization=1, aia_exp_time=2.9):
-		"""Class to make NeRF volume renders that also can read AIA temperature response functions
-
-		Parameters
-		----------
-		aia_response_path : string
-			path to file containing SDO/AIA temperature resp. functions
-		density_normalization : float
-			density normalization factor
-		aia__time: float
-			typical aia exposure time
-		"""
-
-		# AIA temperature resp. functions.
-		aia_resp = read_genx(aia_response_path+"aia_temp_resp.genx")
-
-		# Exposure time
-		# = s_map.meta["exptime"]
-
-
-		temperature = np.power(10, aia_resp['A193']['LOGTE']) #temperature
-		response = aia_resp['A193']['TRESP']*u.cm**5*aia_exp_time  # multiply response by typical AIA exposure time
-		response = response.to(u.um**5).value
-
-		self.tres193 = interpolate.interp1d(temperature, response)
-		self.density_normalization = density_normalization
-		self.maximum_AIA_intensity = maximum_AIA_intensity
-
-		# Normalization of the images (0 to 1)
-		self.sdo_norms = {171: ImageNormalize(vmin=0, vmax=8600, stretch=AsinhStretch(0.005), clip=True),
-											193: ImageNormalize(vmin=0, vmax=9800, stretch=AsinhStretch(0.005), clip=True),
-											211: ImageNormalize(vmin=0, vmax=5800, stretch=AsinhStretch(0.005), clip=True),
-											304: ImageNormalize(vmin=0, vmax=8800, stretch=AsinhStretch(0.001), clip=True)}
-
-	def raw2outputs_density_temp(self,
-		raw: torch.Tensor,
-		z_vals: torch.Tensor,
-		rays_d: torch.Tensor,
-		raw_noise_std: float = 0.0
-		) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-		"""
-		Convert the raw NeRF output into emission and absorption.
-
-		raw: output of NeRF, 2 values per sampled point
-		z_vals: distance along the ray as measure from the origin
-		"""
-
-		# Difference between consecutive elements of `z_vals`. [n_rays, n_samples]
-		# compute line element (dz) for integration
-		dists = z_vals[..., 1:] - z_vals[..., :-1]
-		dists = torch.cat([dists[..., :1], dists], dim=-1)
-
-
-		# Multiply each distance by the norm of its corresponding direction ray
-		# to convert to real world distance (accounts for non-unit directions).
-		dists = dists * torch.norm(rays_d[..., None, :], dim=-1)
-
-		# Add noise to model's predictions for density. Can be used to
-		# regularize network during training (prevents floater artifacts).
-		noise = 0.
-		if raw_noise_std > 0.:
-			noise = torch.randn(raw[..., -1].shape) * raw_noise_std
-
-		# density ([..., 0]; epsilon(z)) and temperature ([..., 1]; kappa(z))
-		# dI = density^2*temperature_response(T) dz ;
-
-		# Get density in units of um^-3
-		density = nn.functional.relu(raw[..., 0])/self.density_normalization
-		# Get temperature
-		temperature = nn.functional.relu(raw[..., 1])
-		# Get the AIA temperature function in units of um^-5
-		temperature_response = self.tres193(temperature)  # TODO: Modify for arbritrary channels
-
-		# Calculate intensity as density^2*temperature_response(T)  dz
-		emerging_intensity = density*density*temperature_response
-
-		# Get absorption coefficient
-		absortpion_coefficient = nn.functional.relu(raw[..., 2])
-
-		# Calculate absorption
-		absorption = torch.exp(-absortpion_coefficient *density * dists)
-
-		# compute total absorption for each light ray (intensity)
-		# how much light is transmitted from each sampled point
-		total_absorption = cumprod_exclusive(absorption + 1e-10) # first intensity has no absorption (1, t[0], t[0] * t[1], t[0] * t[1] * t[2], ...)
-
-
-		emerging_intensity = emerging_intensity * total_absorption  # integrate total intensity [n_rays, n_samples - 1]
-		emerging_intensity = 0.5*(emerging_intensity[:, :-1]+emerging_intensity[:, 1:])*dists[:, :-1]
-
-
-		# sum all intensity contributions
-		pixel_intensity =  self.sdo_norms[193](emerging_intensity.sum(1)[:, None])/self.maximum_aia_intensity
-
-		# set the weigths to the intensity contributions
-		weights = emerging_intensity
-		weights = torch.cat([weights, weights[..., -1][:,None]], dim=-1)
-
-		# Estimated depth map is predicted distance.
-		depth_map = torch.sum(weights * z_vals, dim=-1)
-
-		# Disparity map is inverse depth.
-		# disp_map = 1. / torch.max(1e-10 * torch.ones_like(depth_map),
-		#                          depth_map / torch.sum(weights, -1))
-
-		# Sum of weights along each ray. In [0, 1] up to numerical error.
-		acc_map = torch.sum(weights, dim=-1)
-
-		return pixel_intensity, depth_map, acc_map, weights
-
-
-def raw2outputs(raw: torch.Tensor,
-				z_vals: torch.Tensor,
+def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, sigma_e)
+				query_points: torch.Tensor, # (batch, sampling_points, coord(x,y,z) )
+				z_vals: torch.Tensor, # (batch, sampling_points, distance)
 				rays_d: torch.Tensor,
 				raw_noise_std: float = 0.0
 				) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 	r"""
-	Convert the raw NeRF output into emission and absorption.
+	Convert the raw NeRF output into electron density (1 model output).
 
 	raw: output of NeRF, 2 values per sampled point
 	z_vals: distance along the ray as measure from the origin
@@ -257,7 +146,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	channel_map, weights, absorption = raw2outputs(raw, z_vals, rays_d)
+	channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals, rays_d)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
@@ -283,7 +172,7 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		channel_map, weights, absorption = raw2outputs(raw, z_vals_combined, rays_d)
+		channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals_combined, rays_d)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch
