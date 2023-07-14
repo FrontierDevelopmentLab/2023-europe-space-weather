@@ -18,7 +18,7 @@ plot_dir = "./src/icarus/plots/"
 data_dir = "./src/icarus/data/"
 
 if __name__ == "__main__":
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'  # currently having error using cuda
     device = "cpu"
 
     # load a pre-trained model
@@ -31,46 +31,64 @@ if __name__ == "__main__":
     )
     img_data = fits.getdata(fname)
     # print(img_data.shape)  # 512 x 512
+
+    # our input is gray-scaled; stack the same input three times to fake a rgb image
     arrays = [img_data, img_data.copy(), img_data.copy()]
     img_data_rgb = np.stack(arrays, axis=2).astype(np.int16)
+    # normalise to [0, 1]
     img_data_normalised = (img_data_rgb - img_data_rgb.min()) / (
         img_data_rgb.max() - img_data_rgb.min()
     )
     img_data_normalised = img_data_normalised.astype(np.float32)
-    # print(img_data_rgb.dtype)
-    # print(img_data_rgb[0,0,0])
-    # print(img_data_rgb.min())
-    # print(img_data_rgb.max())
     # print(img_data_rgb.shape)  # 512 x 512 x 3
-    # img_data_rgb = Image.fromarray(img_data_rgb)
-    # img_data_rgb = Image.fromarray(img_data)
 
-    x = transforms.ToTensor()(img_data_normalised).unsqueeze(0).to(device)
-    print(x.shape)
-    print(x.nelement())  # 786432
-
-    plotname = os.path.join(plot_dir, "secchi_1.png")
+    # plot the original fits image as png
+    plotname = os.path.join(plot_dir, "secchi_original.png")
     plt.figure(figsize=(12, 9))
     plt.axis("off")
     plt.imshow(img_data_normalised)
     plt.show()
     plt.savefig(plotname)
 
+    x = transforms.ToTensor()(img_data_normalised).unsqueeze(0).to(device)
+    # print(x.nelement())  # 786432
+
+    # # compress (also done in: out_net = net.forward(x))
+    # with torch.no_grad():
+    #     print("x", x.shape)
+    #     y = net.g_a(x)
+    #     print("y", y.shape)
+    #     y_strings = net.entropy_bottleneck.compress(y)
+    #     print("len(y_strings)=", len(y_strings))
+
+    # strings = [y_strings]
+    # shape = y.size()[-2:]
+
+    # # decompress (also done in: out_net = net.forward(x))
+    # with torch.no_grad():
+    #     out_net = net.decompress(strings, shape)
+
+    # compress and decompress
+    x_hat = out_net["x_hat"]
+
     with torch.no_grad():
         out_net = net.forward(x)
     out_net["x_hat"].clamp_(0, 1)
     print(out_net.keys())
 
+    # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
+
+    # save reconstructed image
     rec_net = transforms.ToPILImage()(out_net["x_hat"].squeeze().cpu())
 
-    plotname = os.path.join(plot_dir, "secchi_rec.png")
+    plotname = os.path.join(plot_dir, "secchi_reconstructed.png")
     plt.figure(figsize=(12, 9))
     plt.axis("off")
     plt.imshow(rec_net)
     plt.show()
     plt.savefig(plotname)
 
-
+    # comparison
     diff = torch.mean((out_net["x_hat"] - x).abs(), axis=1).squeeze().cpu()
 
     fix, axes = plt.subplots(1, 3, figsize=(16, 12))
@@ -86,12 +104,12 @@ if __name__ == "__main__":
     axes[2].imshow(diff, cmap="viridis")
     axes[2].title.set_text("Difference")
 
-    # plotname = os.path.join(plot_dir, "secchi_2.png")
-    # plt.show()
-    # plt.savefig(plotname)
+    # plot comparison of original, reconstructed and diff
+    plotname = os.path.join(plot_dir, "secchi_comparison.png")
+    plt.show()
+    plt.savefig(plotname)
 
-    # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
-
+    # compute metrics
     def compute_psnr(a, b):
         mse = torch.mean((a - b) ** 2).item()
         return -10 * math.log10(mse)
