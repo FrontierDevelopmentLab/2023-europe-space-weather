@@ -14,11 +14,20 @@ from PIL import Image
 from pytorch_msssim import ms_ssim
 from torchvision import transforms
 
-plot_dir = "./src/icarus/plots/"
-data_dir = "./src/icarus/data/"
+PLOT_DIR = "./src/icarus/plots/"
+DATA_DIR = "./src/icarus/data/"
+
+"""
+The following script runs a pre-trained compression model on a secchi fits file
+by following: https://github.com/InterDigitalInc/CompressAI/blob/master/examples/CompressAI%20Inference%20Demo.ipynb
+"""
 
 if __name__ == "__main__":
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'  # currently having error using cuda
+    if not os.path.exists(PLOT_DIR):
+        os.makedirs(PLOT_DIR)
+        print("The plot directory is created.")
+
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'  # currently having error using cuda on onboard VM
     device = "cpu"
 
     # load a pre-trained model
@@ -27,7 +36,7 @@ if __name__ == "__main__":
 
     # load a fits image
     fname = os.path.join(
-        data_dir, "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
+        DATA_DIR, "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
     )
     img_data = fits.getdata(fname)
     # print(img_data.shape)  # 512 x 512
@@ -43,7 +52,7 @@ if __name__ == "__main__":
     # print(img_data_rgb.shape)  # 512 x 512 x 3
 
     # plot the original fits image as png
-    plotname = os.path.join(plot_dir, "secchi_original.png")
+    plotname = os.path.join(PLOT_DIR, "secchi_original.png")
     plt.figure(figsize=(12, 9))
     plt.axis("off")
     plt.imshow(img_data_normalised)
@@ -67,10 +76,9 @@ if __name__ == "__main__":
     # # decompress (also done in: out_net = net.forward(x))
     # with torch.no_grad():
     #     out_net = net.decompress(strings, shape)
+    # x_hat = out_net["x_hat"]
 
     # compress and decompress
-    x_hat = out_net["x_hat"]
-
     with torch.no_grad():
         out_net = net.forward(x)
     out_net["x_hat"].clamp_(0, 1)
@@ -81,7 +89,7 @@ if __name__ == "__main__":
     # save reconstructed image
     rec_net = transforms.ToPILImage()(out_net["x_hat"].squeeze().cpu())
 
-    plotname = os.path.join(plot_dir, "secchi_reconstructed.png")
+    plotname = os.path.join(PLOT_DIR, "secchi_reconstructed.png")
     plt.figure(figsize=(12, 9))
     plt.axis("off")
     plt.imshow(rec_net)
@@ -105,7 +113,7 @@ if __name__ == "__main__":
     axes[2].title.set_text("Difference")
 
     # plot comparison of original, reconstructed and diff
-    plotname = os.path.join(plot_dir, "secchi_comparison.png")
+    plotname = os.path.join(PLOT_DIR, "secchi_comparison.png")
     plt.show()
     plt.savefig(plotname)
 
