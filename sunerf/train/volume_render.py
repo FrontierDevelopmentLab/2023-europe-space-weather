@@ -10,9 +10,10 @@ from sunerf.train.sampling import sample_hierarchical
 from sunerf.train.sampling import sample_non_uniform_box
 
 
-def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, sigma_e)
+def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 				query_points: torch.Tensor, # (batch, sampling_points, coord(x,y,z) )
 				z_vals: torch.Tensor, # (batch, sampling_points, distance)
+				rays_o: torch.Tensor,
 				rays_d: torch.Tensor,
 				raw_noise_std: float = 0.0
 				) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -38,31 +39,60 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, sigma_e)
 	if raw_noise_std > 0.:
 		noise = torch.randn(raw[..., -1].shape) * raw_noise_std
 
+	# here we do stuff
+	electron_density = raw[:, :, 0]
+
+    # HOWARD AND TAPPIN 2009 FIG 3
+	# working with units of solar radii
+    # half angular width of Sun (angle between SQ and ST)
+	s_q = query_points.pow(2).sum(-1).pow(0.5)
+	s_t = 1
+	omega = torch.asin(s_t / s_q)
+	
+	# z = distance Q to observer
+	z = rays_o.pow(2).sum(-1).pow(0.5)
+
+    # chi = scattering angle between line of sight and SQ
+	p = query_points[..., :2].pow(2).sum(-1).pow(0.5)
+	sin2_chi = (p / s_q) ** 2
+	
+
 	# emission ([..., 0]; epsilon(z)) and absorption ([..., 1]; kappa(z)) coefficient per unit volume
 	# dtau = - kappa dz
 	# I' / I = - kappa dz --> I' emerging intensity; I incident intensity;
-	intensity = torch.exp(raw[..., 0]) * dists # emission per sampled point [n_rays, n_samples]
+	# intensity = torch.exp(raw[..., 0]) * dists # emission per sampled point [n_rays, n_samples]
 
-	absorption = torch.exp(-nn.functional.relu(raw[..., 1] + noise) * dists) # transmission per sampled point [n_rays, n_samples]
+	# absorption = torch.exp(-nn.functional.relu(raw[..., 1] + noise) * dists) # transmission per sampled point [n_rays, n_samples]
 	# [1, .9, 1, 0, 0, 1] --> less dense objects transmit light (1); dense objects absorbe light (0)
 
 	# compute total absorption for each light ray (intensity)
 	# how much light is transmitted from each sampled point
-	total_absorption = cumprod_exclusive(absorption + 1e-10) # first intensity has no absorption (1, t[0], t[0] * t[1], t[0] * t[1] * t[2], ...)
+	# total_absorption = cumprod_exclusive(absorption + 1e-10) # first intensity has no absorption (1, t[0], t[0] * t[1], t[0] * t[1] * t[2], ...)
+
+
+	
 	# [(1), 1, .9, .9, 0, 0] --> total absorption for each point along the ray
 	# apply absorption to intensities
-	emerging_intensity = intensity * total_absorption  # integrate total intensity [n_rays, n_samples - 1]
-	# sum all intensity contributions
-	pixel_intensity = emerging_intensity.sum(1)[:, None]
+	# emerging_intensity = intensity * total_absorption  # integrate total intensity [n_rays, n_samples - 1]
 
-	# stretch value range to images --> ASINH
-	pixel_intensity = torch.asinh(pixel_intensity / 0.005) / 5.991471 # normalization
+    # intensity (total and polarised) from all electrons
+	# for one electron * electron density * weighted by distance along LOS
+	emerging_tB = intensity_tB * electron_density * dists
+	emerging_pB = intensity_pB * electron_density * dists
+	# sum all intensity contributions along LOS
+	pixel_tB = emerging_tB.sum(1)[:, None] 
+	pixel_pB = emerging_pB.sum(1)[:, None] 
+
+	# target images are already logged
+	scaling = 1 # TODO min/max
+	pixel_tB = torch.log(pixel_intensity) / scaling # normalization
+	pixel_pB = torch.log(pixel_intensity) / scaling # normalization
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)
-	weights = emerging_intensity
-	weights = weights / (weights.sum(1)[:, None] + 1e-10)
+    # need weights for sampling for fine model
+	weights = electron_density / (electron_density.sum(1)[:, None] + 1e-10)
 
-	return pixel_intensity, weights, absorption
+	return pixel_tB, pixel_pB, weights #, absorption
 
 
 def cumprod_exclusive(tensor: torch.Tensor) -> torch.Tensor:
@@ -146,7 +176,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals, rays_d)
+	channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals, rays_o, rays_d)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
@@ -172,7 +202,7 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals_combined, rays_d)
+		channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch
