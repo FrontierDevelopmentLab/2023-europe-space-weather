@@ -27,7 +27,9 @@ if __name__ == "__main__":
         os.makedirs(PLOT_DIR)
         print("The plot directory is created.")
 
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'  # currently having error using cuda on onboard VM
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # currently having the folloing error using cuda on onboard VM
+    # RuntimeError: GET was unable to find an engine to execute this computation
     device = "cpu"
 
     # load a pre-trained model
