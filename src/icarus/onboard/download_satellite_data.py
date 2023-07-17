@@ -31,7 +31,6 @@ from sunpy.net import attrs as a
 #
 
 
-
 def load_ephemeris_data(fname: str) -> list:
     """
     Loads data from horizon ephemeris files, passed as argument.
@@ -259,7 +258,7 @@ if __name__ == "__main__":
     event_batches = []
     cor1_batches = []
     cor2_batches = []
-    
+
     for batch in timeseries_batches:
         min_time = np.min(batch)
         max_time = np.max(batch)
@@ -276,7 +275,6 @@ if __name__ == "__main__":
         cor1_batches.append(resulting_images_for_batch_cor1)
         cor2_batches.append(resulting_images_for_batch_cor2)
         event_batches.append(resulting_events_for_batch)
-    
 
     # Create Folders to save data to
     # Current Working Directory
@@ -300,14 +298,22 @@ if __name__ == "__main__":
     filenames = []
     for cor1_batch in cor1_batches:
         try:
-            first_batch_downloads = Fido.fetch(cor1_batch, path = "{}/".format(cor1_folder))
+            first_batch_downloads = Fido.fetch(
+                cor1_batch, path="{}/".format(cor1_folder)
+            )
             filenames.append(first_batch_downloads)
         except Exception as e:
-            logging.error("Error encountered in downloading batch for Cor1: {}".format(e))
+            logging.error(
+                "Error encountered in downloading batch for Cor1: {}".format(e)
+            )
     for cor2_batch in cor2_batches:
         try:
-            second_batch_downloads = Fido.fetch(cor2_batch, path = "{}/".format(cor2_folder))
+            second_batch_downloads = Fido.fetch(
+                cor2_batch, path="{}/".format(cor2_folder)
+            )
             filenames.append(second_batch_downloads)
         except Exception as e:
-            logging.error("Error encountered in downloading batch for Cor1: {}".format(e))
+            logging.error(
+                "Error encountered in downloading batch for Cor1: {}".format(e)
+            )
     # To find data of level: fits.open as f: f[0].header

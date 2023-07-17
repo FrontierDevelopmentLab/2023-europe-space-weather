@@ -192,5 +192,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Pytest coverage
+reports
+
 # Pyenv
 .python-version

@@ -24,7 +24,6 @@ from torch.utils.data import DataLoader, Dataset, random_split
 
 class FitsDataModule(LightningDataModule):
     def __init__(self, hparams):
-
         super().__init__()
         logging.info("Load data")
 
