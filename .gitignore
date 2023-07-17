@@ -1,3 +1,6 @@
+# ignore tools directory
+/src/icarus/onboard/tools/
+
 #  data for the onboard components
 *.ephemeris
 *.fts
