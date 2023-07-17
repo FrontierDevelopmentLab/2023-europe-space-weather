@@ -1,6 +1,7 @@
 import io
 import math
 import os
+from os.path import dirname
 
 import astropy
 import astropy.io.fits as fits
@@ -14,8 +15,9 @@ from PIL import Image
 from pytorch_msssim import ms_ssim
 from torchvision import transforms
 
-PLOT_DIR = "./src/icarus/plots/"
-DATA_DIR = "./src/icarus/data/"
+ICARUS_DIR = dirname(dirname(__file__))
+PLOT_DIR = os.path.join(ICARUS_DIR, "plots")
+DATA_DIR = os.path.join(ICARUS_DIR, "data")
 
 """
 The following script runs a pre-trained compression model on a secchi fits file
