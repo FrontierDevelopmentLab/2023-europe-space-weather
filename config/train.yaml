@@ -1,5 +1,5 @@
 Training:
-  working_directory: '/mnt/nerf-data/batches'  # directory for intermediate data conversion
+  working_directory: '/mnt/ground-data/batches'  # directory for intermediate data conversion
   n_epochs: 1000                                          # number of updates for all available rays
   batch_size: 4096                                        # number of rays per gradient step (power of 2)
   num_workers: 32                                         # number of workers for data loading
