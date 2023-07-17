@@ -52,7 +52,7 @@ def log_overview(images, poses, times, cmap):
     step = max(1, len(iter_list) // 50)
     for i, img in iter_list[::step]:
         fig = plt.figure(figsize=(16, 8), dpi=150)
-        ax = plt.subplot(121, projection='3d')
+        ax = plt.subplot(131, projection='3d')
         # plot all viewpoints
         _ = ax.quiver(
             origins[..., 0].flatten(),
@@ -79,9 +79,15 @@ def log_overview(images, poses, times, cmap):
         ax.set_zlim(-d, d)
         ax.scatter(0, 0, 0, marker='o', color='yellow')
 
-        ax = plt.subplot(122)
+        ax = plt.subplot(132)
         # plot corresponding image
-        ax.imshow(img, norm=sdo_img_norm, cmap=cmap)
+        ax.imshow(img[..., 0], norm=sdo_img_norm, cmap=cmap)
+        ax.set_axis_off()
+        ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
+
+        ax = plt.subplot(133)
+        # plot corresponding image
+        ax.imshow(img[..., 1], norm=sdo_img_norm, cmap=cmap)
         ax.set_axis_off()
         ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
 

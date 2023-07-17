@@ -192,6 +192,7 @@ def init_models(
         n_layers: int,
         d_filter: int,
         log_space: bool,
+        scale_factor: float,
         use_fine_model: bool,
         skip: Tuple[int],
 ):
@@ -218,7 +219,8 @@ def init_models(
     encoder = PositionalEncoder(
         d_input,
         n_freqs,
-        log_space=log_space
+        log_space=log_space,
+        scale_factor = scale_factor
     )
     encode = lambda x: encoder(x)
 

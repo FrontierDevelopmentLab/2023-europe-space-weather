@@ -57,6 +57,7 @@ class SuNeRFModule(LightningModule):
             n_layers=self.hparams['Model']['n_layers'],
             d_filter=self.hparams['Model']['d_filter'],
             log_space=self.hparams['Encoders']['log_space'],
+            scale_factor=self.hparams['Encoders']['scale_factor'],
             use_fine_model=self.hparams['Model']['use_fine_model'],
             skip=self.hparams['Model']['skip'],
         )
@@ -90,18 +91,18 @@ class SuNeRFModule(LightningModule):
             assert not torch.isinf(v).any(), f"! [Numerical Alert] {k} contains Inf."
 
         # backpropagation
-        pred_img = outputs['channel_map']
+        pred_img = outputs['pixel_B']
         fine_loss = torch.nn.functional.mse_loss(pred_img, target_img) # optimize fine model
-        coarse_loss = torch.nn.functional.mse_loss(outputs['channel_map_0'], target_img)  # optimize coarse model
-        regularization_loss = outputs['regularization'].mean() # suppress unconstrained regions
-        loss = fine_loss + coarse_loss + self.lambda_regularization * regularization_loss
+        coarse_loss = torch.nn.functional.mse_loss(outputs['pixel_B_0'], target_img)  # optimize coarse model
+        # regularization_loss = outputs['regularization'].mean() # suppress unconstrained regions
+        loss = fine_loss + coarse_loss #+ self.lambda_regularization * regularization_loss
         #
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
 
         # log results to WANDB
         self.log("train/loss", loss)
-        self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'regularization': regularization_loss, 'total': loss})
+        self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'total': loss})
         self.log("Training PSNR", psnr)
 
         # update learning rate and log
@@ -120,10 +121,10 @@ class SuNeRFModule(LightningModule):
 
         distance = rays_o.pow(2).sum(-1).pow(0.5).mean()
         return {'target_img': target_img,
-                'channel_map': outputs['channel_map'],
-                'channel_map_coarse': outputs['channel_map_0'],
-                'height_map': outputs['height_map'],
-                'absorption_map': outputs['absorption_map'],
+                'channel_map': outputs['pixel_B'],
+                'channel_map_coarse': outputs['pixel_B_0'],
+                'height_map': outputs['pixel_B'][..., 0], # TODO resolve quick fix
+                'absorption_map': outputs['pixel_B'][..., 0], # TODO resolve quick fix
                 'z_vals_stratified': outputs['z_vals_stratified'],
                 'z_vals_hierarchical': outputs['z_vals_hierarchical'],
                 'distance': distance}
@@ -181,7 +182,8 @@ if __name__ == '__main__':
     N_GPUS = torch.cuda.device_count()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', type=str, required=True)
+    parser.add_argument('--data_path_pB', type=str, required=True)
+    parser.add_argument('--data_path_tB', type=str, required=True)
     parser.add_argument('--path_to_save', type=str, required=True)
     parser.add_argument('--n_epochs', default=100, type=int, help='number of training epochs.')
     parser.add_argument('--hyperparameters', default='../../config/hyperparams.yaml', type=str)
@@ -192,7 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_id', default=None, type=str, required=False)
     args = parser.parse_args()
 
-    config_data = {'data_path': args.data_path}
+    config_data = {'data_path_tB': args.data_path_tB, 'data_path_pB': args.data_path_pB, }
     with open(args.hyperparameters, 'r') as stream:
         config_data.update(yaml.load(stream, Loader=yaml.SafeLoader))
     with open(args.train, 'r') as stream:

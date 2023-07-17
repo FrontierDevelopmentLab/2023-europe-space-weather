@@ -47,15 +47,16 @@ class NeRFDataModule(LightningDataModule):
         # use an image of the first instrument (SDO)
         test_idx = len(images) // 6
 
+        print("BEFORE FLATTEN", np.array(rays).shape, np.array(times).shape, np.array(images).shape)
         valid_rays, valid_times, valid_images = self._flatten_data([v for i, v in enumerate(rays) if i == test_idx],
                                                                    [v for i, v in enumerate(times) if i == test_idx],
                                                                    [v for i, v in enumerate(images) if i == test_idx])
-        print(valid_rays.shape, valid_images.shape)                                                           
+        print("AFTER FLATTEN", valid_rays.shape, valid_images.shape, valid_times.shape)                                                           
                                                                    
         # remove nans (masked values) from data
-        not_nan_pixels = (~np.isnan(valid_images))[:, 0]
-        print(not_nan_pixels.shape, not_nan_pixels[:3])
-        valid_rays, valid_times, valid_images = valid_rays[not_nan_pixels], valid_times[not_nan_pixels], valid_images[not_nan_pixels]
+        # not_nan_pixels = np.any(~np.isnan(valid_images), -1) # instead of valid_images valid_times
+        # print("NAN PIXELLING", not_nan_pixels.shape, not_nan_pixels[:3])
+        # valid_rays, valid_times, valid_images = valid_rays[not_nan_pixels], valid_times[not_nan_pixels], valid_images[not_nan_pixels]
                                                                    
         # batching
         logging.info('Convert data to batches')
@@ -109,8 +110,8 @@ class NeRFDataModule(LightningDataModule):
 
     def _flatten_data(self, rays, times, images):
         flat_rays = np.concatenate(rays)
-        flat_images = np.concatenate([i.reshape((-1, 1)) for i in images])
-        flat_time = np.concatenate([np.ones(i.shape[:3], dtype=np.float32).reshape((-1, 1)) * t
+        flat_images = np.concatenate([i.reshape((-1, images[0].shape[-1])) for i in images])
+        flat_time = np.concatenate([np.ones(i.shape[:2], dtype=np.float32).reshape((-1, 1)) * t
                                     for t, i in zip(times, images)])
         return flat_rays, flat_time, flat_images
 
@@ -151,17 +152,38 @@ class NumpyFilesDataset(Dataset):
 def get_data(config_data):
     debug = config_data['Debug']
 
-    data_path = config_data['data_path']
+    data_path_pB = config_data['data_path_pB']
+    data_path_tB = config_data['data_path_tB']
 
-    s_maps = sorted(glob.glob(data_path))
+    # 1276 tB files, 1351 pB files
+    # can assume matching names have matching obs times and angles
+    s_maps_pB = sorted(glob.glob(data_path_pB))
+    s_maps_tB = sorted(glob.glob(data_path_tB))
+
+    common_tB_fnames = []
+    common_pB_fnames = []
+    for fname_pB in s_maps_pB:
+        corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
+        if corresponding_fname_tB in s_maps_tB:
+            common_tB_fnames.append(glob.glob(corresponding_fname_tB))
+            common_pB_fnames.append(glob.glob(fname_pB))
+
+    s_maps_pB = common_pB_fnames
+    s_maps_tB = common_tB_fnames
+
     if debug:
-        s_maps = s_maps[::100]
+        s_maps_pB = s_maps_pB[::100]
+        s_maps_tB = s_maps_tB[::100]
 
     with multiprocessing.Pool(os.cpu_count()) as p:
-        data = [d for d in tqdm(p.imap(_load_map_data, s_maps), total=len(s_maps))]
-    images, poses, rays, times, focal_lengths = list(map(list, zip(*data)))
+        data_pB = [d for d in tqdm(p.imap(_load_map_data, s_maps_pB), total=len(s_maps_pB))]
+        data_tB = [d for d in tqdm(p.imap(_load_map_data, s_maps_tB), total=len(s_maps_tB))]
+    
+    _, poses, rays, times, focal_lengths = list(map(list, zip(*data_tB)))
 
-    ref_wavelength = Map(s_maps[0]).wavelength.value if Map(s_maps[0]).wavelength is not None else 0
+    images = np.stack([[d[0] for d in data_tB], [d[0] for d in data_pB]], -1)
+
+    ref_wavelength = Map(s_maps_tB[0]).wavelength.value if Map(s_maps_tB[0]).wavelength is not None else 0
     return images, poses, rays, times, focal_lengths, ref_wavelength
 
 

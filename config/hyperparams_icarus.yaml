@@ -7,6 +7,7 @@ Encoders:
   n_freqs : 10            # Number of encoding functions for samples
   log_space : True        # If set, frequencies scale in log space
   n_freqs_views : 4       # Number of encoding functions for views
+  scale_factor : 340
 
 Stratified sampling:
   n_samples : 64                  # Number of spatial samples per ray

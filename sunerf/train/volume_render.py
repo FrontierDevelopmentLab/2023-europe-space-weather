@@ -22,6 +22,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
 	raw: output of NeRF, 2 values per sampled point
 	z_vals: distance along the ray as measure from the origin
+	        (? where origin is centre of near and far ?)
 	"""
 
 	# Difference between consecutive elements of `z_vals`. [n_rays, n_samples]
@@ -59,7 +60,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	omega = torch.asin(s_t / s_q)
 	
 	# z = distance Q to observer
-	z = z_vals
+	z = rays_o.pow(2).sum(-1).pow(0.5)[:, None] + z_vals # distance between observer and scattering point Q
 
     # chi = scattering angle between line of sight and SQ (dot product)
 	chi = torch.acos((rays_o[:, None] * query_points).sum(-1) / (rays_o.pow(2).sum(-1).pow(0.5)[:, None] * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
@@ -69,6 +70,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	u = 0.63
 
 	# sigma_e = thomson cross section [Howard and Tappin 2009 eqn 3]
+	r_sun = 6957e+8 # m / solar radii
 	sigma_e = 7.95e-30 # m2/sr
 
 	# I0 = intensity of the source (Sun) as a power per unit area (of the photosphere) per unit solid angle
@@ -84,7 +86,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
 
     # equations 23, 24, 29
-	intensity_T = I0 * torch.pi * sigma_e / (2 * z ** 2) * ((1 - u) * C + u * D)
+	intensity_T = I0 * torch.pi * sigma_e  / (2 * z ** 2) * ((1 - u) * C + u * D)
 	intensity_pB = I0 * torch.pi * sigma_e / (2 * z ** 2) * torch.sin(chi) ** 2 * ((1 - u) * A + u * B)
 
 	intensity_tB = 2 * intensity_T - intensity_pB
@@ -109,22 +111,28 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
     # intensity (total and polarised) from all electrons
 	# for one electron * electron density * weighted by line element ds- separation between sampling points
+	#print('Intensities', intensity_tB[0], intensity_pB[0], torch.sum(dists, 1))
 	emerging_tB = intensity_tB * electron_density * dists
 	emerging_pB = intensity_pB * electron_density * dists
+
+	print(intensity_tB * dists)
+
 	# sum all intensity contributions along LOS
 	pixel_tB = emerging_tB.sum(1)[:, None] 
 	pixel_pB = emerging_pB.sum(1)[:, None] 
+	pixel_density = (electron_density * dists).sum(1)[:, None]
 
 	# target images are already logged
 	v_min, v_max = -18, -10
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
+	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)
     # need weights for sampling for fine model
 	weights = electron_density / (electron_density.sum(1)[:, None] + 1e-10)
 
-	return pixel_tB, pixel_pB, weights #, absorption
+	return pixel_B, pixel_density, weights
 
 
 def cumprod_exclusive(tensor: torch.Tensor) -> torch.Tensor:
@@ -208,13 +216,13 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals, rays_o, rays_d)
+	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
 	if n_samples_hierarchical > 0:
 		# Save previous outputs to return.
-		channel_map_0 = channel_map
+		pixel_B_0 = pixel_B
 
 		# Apply hierarchical sampling for fine query points.
 		query_points, z_vals_combined, z_hierarch = sample_hierarchical(
@@ -234,26 +242,26 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		channel_map, weights, absorption = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d)
+		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch
-		outputs['channel_map_0'] = channel_map_0
+		outputs['pixel_B_0'] = pixel_B_0
 
 	# compute image of absorption
-	absorption_map = (1 - absorption).sum(-1)
+	density_map = pixel_density
 
 	# compute regularization of absorption
-	distance = query_points.pow(2).sum(-1).pow(0.5)
-	regularization = torch.relu(distance - 1.2) * (1 - absorption) # penalize absorption past 1.2 solar radii
+	# distance = query_points.pow(2).sum(-1).pow(0.5)
+	# regularization = torch.relu(distance - 1.2) * (1 - absorption) # penalize absorption past 1.2 solar radii
 
 	# compute image of height
-	height_map = (weights * distance).sum(-1)
+	# height_map = (weights * distance).sum(-1)
 
 	# Store outputs.
-	outputs['channel_map'] = channel_map
+	outputs['pixel_B'] = pixel_B
 	outputs['weights'] = weights
-	outputs['height_map'] = height_map
-	outputs['absorption_map'] = absorption_map
-	outputs['regularization'] = regularization
+	# outputs['height_map'] = height_map
+	outputs['density_map'] = density_map
+	# outputs['regularization'] = regularization
 	return outputs
