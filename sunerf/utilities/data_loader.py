@@ -48,6 +48,11 @@ class NeRFDataModule(LightningDataModule):
         valid_rays, valid_times, valid_images = self._flatten_data([v for i, v in enumerate(rays) if i == test_idx],
                                                                    [v for i, v in enumerate(times) if i == test_idx],
                                                                    [v for i, v in enumerate(images) if i == test_idx])
+                                                                   
+        # remove nans (masked values) from data
+        not_nan_pixels = ~np.isnan(valid_images)
+        valid_rays, valid_times, valid_images = valid_rays[not_nan_pixels], valid_times[not_nan_pixels], valid_images[not_nan_pixels]
+                                                                   
         # batching
         logging.info('Convert data to batches')
         n_batches = int(np.ceil(valid_rays.shape[0] / self.batch_size))
@@ -62,6 +67,11 @@ class NeRFDataModule(LightningDataModule):
         rays, times, images = self._flatten_data([v for i, v in enumerate(rays) if i != test_idx],
                                                  [v for i, v in enumerate(times) if i != test_idx],
                                                  [v for i, v in enumerate(images) if i != test_idx])
+
+        # remove nans (masked values) from data
+        not_nan_pixels = ~np.isnan(images)
+        rays, times, images = rays[not_nan_pixels], times[not_nan_pixels], images[not_nan_pixels]
+
         # shuffle
         r = np.random.permutation(rays.shape[0])
         rays, times, images = rays[r], times[r], images[r]

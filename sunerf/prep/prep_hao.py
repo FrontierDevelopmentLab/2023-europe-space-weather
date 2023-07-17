@@ -11,8 +11,6 @@ from sunpy.map import Map
 from sunpy.map.maputils import all_coordinates_from_map
 from astropy.coordinates import SkyCoord
 
-from sunerf.data.utils import psi_norms
-
 
 def _load_HAO(file_path, occ_rad=0.1 * u.AU):
     """
