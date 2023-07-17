@@ -83,7 +83,7 @@ def _loadMLprepMap(file_path, out_path, resolution=None):
     # normalize image data
     data = s_map.data
     data[s_map.mask] = np.nan
-    v_min, v_max = -16, 0
+    v_min, v_max = -18, -10
     data = (np.log(data) - v_min) / (v_max - v_min)
     data = data.astype(np.float32)
 

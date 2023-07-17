@@ -116,9 +116,9 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	pixel_pB = emerging_pB.sum(1)[:, None] 
 
 	# target images are already logged
-	scaling = 1 # TODO min/max
-	pixel_tB = torch.log(pixel_tB) / scaling # normalization
-	pixel_pB = torch.log(pixel_pB) / scaling # normalization
+	v_min, v_max = -18, -10
+	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
+	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)
     # need weights for sampling for fine model
