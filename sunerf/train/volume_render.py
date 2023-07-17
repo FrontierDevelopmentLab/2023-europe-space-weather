@@ -40,6 +40,15 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 		noise = torch.randn(raw[..., -1].shape) * raw_noise_std
 
 	# here we do stuff
+
+	# For total and polarised brightness need... (Howard and Tappin 2009):
+	# * Omega (half angular width of Sun - depends on distance to sun)
+	# * z (distance from Q to observer)
+	# * chi (scattering angle between observer and S)
+	# * u (limb darkening coeff based on wavelength - constant for white light?)
+	# * I0 (intensity/ of the Sun - will vary with solar cycle - look up table?)
+	# * sigma_e (scattering constant - eqn 3)
+
 	electron_density = raw[:, :, 0]
 
     # HOWARD AND TAPPIN 2009 FIG 3
@@ -52,10 +61,33 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# z = distance Q to observer
 	z = rays_o.pow(2).sum(-1).pow(0.5)
 
-    # chi = scattering angle between line of sight and SQ
-	p = query_points[..., :2].pow(2).sum(-1).pow(0.5)
-	sin2_chi = (p / s_q) ** 2
+    # chi = scattering angle between line of sight and SQ (dot product)
+	chi = torch.acos((rays_o * query_points).sum(-1) / (rays_o.pow(2).sum(-1).pow(0.5) * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
 	
+	# u = limb darkening coeff 
+	# TODO hard coding for now [Ramos 2023]
+	u = 0.63
+
+	# sigma_e = thomson cross section [Howard and Tappin 2009 eqn 3]
+	sigma_e = 7.95e-30 # m2/sr
+
+	# I0 = intensity of the source (Sun) as a power per unit area (of the photosphere) per unit solid angle
+	#    = mean solar radiance ( = irradiance / 4pi)
+	# TODO average for now (move to lookup table later)
+	I0 = 1361 / 4*torch.pi # W·sr−1·m−2 # (Prša et al., 2016)
+
+	ln = torch.log((1 + torch.sin(omega)) / (torch.cos(omega) + 1e-6))
+	cos2_sin = (torch.cos(omega) ** 2 / (torch.sin(omega) + 1e-6))
+	A = torch.cos(omega) * torch.sin(omega) ** 2
+	B = - (1/8) * (1 - 3 * torch.sin(omega) ** 2 - cos2_sin * (1 + 3 * torch.sin(omega) ** 2) * ln)
+	C = (4 / 3) - torch.cos(omega) - torch.cos(omega) ** 3 / 3
+	D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
+
+    # equations 23, 24, 29
+	intensity_T = I0 * torch.pi * sigma_e / (2 * z ** 2) * ((1 - u) * C + u * D)
+	intensity_pB = I0 * torch.pi * sigma_e / (2 * z ** 2) * torch.sin(chi) ** 2 * ((1 - u) * A + u * B)
+
+	intensity_tB = 2 * intensity_T - intensity_pB
 
 	# emission ([..., 0]; epsilon(z)) and absorption ([..., 1]; kappa(z)) coefficient per unit volume
 	# dtau = - kappa dz
@@ -85,8 +117,8 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
 	# target images are already logged
 	scaling = 1 # TODO min/max
-	pixel_tB = torch.log(pixel_intensity) / scaling # normalization
-	pixel_pB = torch.log(pixel_intensity) / scaling # normalization
+	pixel_tB = torch.log(pixel_tB) / scaling # normalization
+	pixel_pB = torch.log(pixel_pB) / scaling # normalization
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)
     # need weights for sampling for fine model
