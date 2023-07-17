@@ -42,7 +42,7 @@ def _load_HAO(file_path, occ_rad=0.1 * u.AU):
     header["CRPIX2"] = header["NAXIS2"]*0.5 + 0.5
 
     #TODO: To be changed ... This is hardcoded for now, ask robert 
-    header['wavelength'] = 5200 
+    header['wavelnth'] = 5200 
 
     map_i = Map(data, header)
     
@@ -75,8 +75,8 @@ def _loadMLprepMap(file_path, out_path, resolution=None):
     s_map = _load_HAO(file_path)
 
     # adjust image size
-    if resolution:
-        s_map = s_map.resample((resolution, resolution) * u.pix)
+    # if resolution:
+    #     s_map = s_map.resample((resolution, resolution) * u.pix)
 
     # normalize image data
     data = s_map.data
@@ -87,7 +87,7 @@ def _loadMLprepMap(file_path, out_path, resolution=None):
 
     s_map = Map(data, s_map.meta)
     dir_name = file_path.split(os.sep)[-2]
-    s_map.save(os.path.join(out_path, dir_name + '_' + os.path.basename(file_path)))
+    s_map.save(os.path.join(out_path, dir_name + '_' + os.path.basename(file_path)), overwrite=True)
 
 
 if __name__ == '__main__':
