@@ -39,9 +39,6 @@ class FitsDataModule(LightningDataModule):
         self.p_test = hparams.get("test percentage", 0.1)
         self.p_val = hparams.get("validation percentage", 0.05)
 
-    # def prepare_data(self):
-    #     pass
-
     def setup(self, stage: str):
         self.current_stage = stage
         cor1_data = glob.glob("{}/*.fts".format(self.cor1_data_dir))  # inner corona
@@ -53,18 +50,22 @@ class FitsDataModule(LightningDataModule):
         p_test = self.p_test
         p_val = self.p_val
 
-        n_train = int(n_total_files * p_train)
-        n_test = int(n_total_files * p_test)
-        n_val = int(n_total_files * p_val)
+        self.n_train = int(n_total_files * p_train)
+        self.n_test = int(n_total_files * p_test)
+        self.n_val = int(n_total_files * p_val)
+
+        n_train_val = self.n_train + self.n_val
 
         # There is a bit of time correlation here
         # - frankly, not important as long as timestamps are used to handle files, ie
         # can correlate timesteps to files, allowing us to reconstruct the correct physics
-
-        self.fits_test = -1
-        self.fits_predict = -1
-        fits_full = -1
-        self.fits_train, self.fits_val = random_split(fits_full, [n_train, n_val])
+        total_files = cor1_data + cor2_data
+        all_fits_data = [self._load_fits(fname) for fname in total_files]
+        self.fits_test = np.random.choice(all_fits_data, self.n_test)
+        fits_full = np.random.choice(all_fits_data, n_train_val)
+        self.fits_train, self.fits_val = random_split(
+            fits_full, [self.n_train, self.n_val]
+        )
 
     def train_dataloader(self):
         return DataLoader(self.fits_train, batch_size=self.batch_size)
@@ -75,15 +76,13 @@ class FitsDataModule(LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.fits_test, batch_size=self.batch_size)
 
-    def predict_dataloader(self):
-        return DataLoader(self.fits_predict, batch_size=self.batch_size)
-
     def _load_fits(fname):
         img_data = fits.getdata(fname)
 
         # our input is gray-scaled; stack the same input three times to fake a rgb image
         arrays = [img_data, img_data.copy(), img_data.copy()]
         img_data_rgb = np.stack(arrays, axis=2).astype(np.int16)
+
         # normalise to [0, 1]
         # img_data_normalised = (img_data_rgb - img_data_rgb.min()) / (
         #     img_data_rgb.max() - img_data_rgb.min()
