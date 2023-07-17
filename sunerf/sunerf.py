@@ -18,6 +18,7 @@ from sunerf.train.sampling import sample_to_solar_surface, sample_non_uniform_bo
 from sunerf.train.volume_render import nerf_forward
 from sunerf.utilities.data_loader import NeRFDataModule, unnormalize_datetime
 
+from sunpy.visualization.colormaps import cm
 
 class SuNeRFModule(LightningModule):
     def __init__(self, hparams, cmap):
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--hyperparameters', default='../../config/hyperparams.yaml', type=str)
     parser.add_argument('--train', default='../../config/train.yaml', type=str)
     parser.add_argument('--resume_from_checkpoint', default=None, type=str, required=False)
-    parser.add_argument('--wandb_project', default='sunerf-v3', type=str, required=False)
+    parser.add_argument('--wandb_project', default='sunerf-cme', type=str, required=False)
     parser.add_argument('--wandb_name', default=None, type=str, required=False)
     parser.add_argument('--wandb_id', default=None, type=str, required=False)
     args = parser.parse_args()
@@ -198,7 +199,7 @@ if __name__ == '__main__':
         config_data.update(yaml.load(stream, Loader=yaml.SafeLoader))
 
     data_module = NeRFDataModule(config_data)
-    cmap = sdo_cmaps[data_module.wavelength]  # set global colormap
+    cmap = cm.soholasco2 #if data_module.wavelength == 5200 else sdo_cmaps[data_module.wavelength]  # set global colormap # TODO
 
     sunerf = SuNeRFModule(config_data, cmap)
 
@@ -213,7 +214,7 @@ if __name__ == '__main__':
                                           monitor='train/loss',
                                           every_n_train_steps=config_data["Training"]["log_every_n_steps"])
 
-    logger = WandbLogger(project=args.wandb_project, offline=False, entity="4pi-euv",
+    logger = WandbLogger(project=args.wandb_project, offline=False, entity="ssa_live_twin",
                          name=args.wandb_name, id=args.wandb_id)
 
     save_path = os.path.join(args.path_to_save, 'save_state.snf')

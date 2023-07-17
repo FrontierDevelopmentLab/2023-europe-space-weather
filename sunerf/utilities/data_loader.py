@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import os
 from datetime import datetime, timedelta
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -14,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.train.ray_sampling import get_rays
 
+from warnings import simplefilter
 
 class NeRFDataModule(LightningDataModule):
 
@@ -48,14 +50,17 @@ class NeRFDataModule(LightningDataModule):
         valid_rays, valid_times, valid_images = self._flatten_data([v for i, v in enumerate(rays) if i == test_idx],
                                                                    [v for i, v in enumerate(times) if i == test_idx],
                                                                    [v for i, v in enumerate(images) if i == test_idx])
+        print(valid_rays.shape, valid_images.shape)                                                           
                                                                    
         # remove nans (masked values) from data
-        not_nan_pixels = ~np.isnan(valid_images)
+        not_nan_pixels = (~np.isnan(valid_images))[:, 0]
+        print(not_nan_pixels.shape, not_nan_pixels[:3])
         valid_rays, valid_times, valid_images = valid_rays[not_nan_pixels], valid_times[not_nan_pixels], valid_images[not_nan_pixels]
                                                                    
         # batching
         logging.info('Convert data to batches')
         n_batches = int(np.ceil(valid_rays.shape[0] / self.batch_size))
+        print(valid_rays.shape, n_batches)
         valid_rays, valid_times, valid_images = np.array_split(valid_rays, n_batches), \
                                                 np.array_split(valid_times, n_batches), \
                                                 np.array_split(valid_images, n_batches)
@@ -69,7 +74,7 @@ class NeRFDataModule(LightningDataModule):
                                                  [v for i, v in enumerate(images) if i != test_idx])
 
         # remove nans (masked values) from data
-        not_nan_pixels = ~np.isnan(images)
+        not_nan_pixels = ~np.any(np.isnan(images), -1)
         rays, times, images = rays[not_nan_pixels], times[not_nan_pixels], images[not_nan_pixels]
 
         # shuffle
@@ -150,17 +155,18 @@ def get_data(config_data):
 
     s_maps = sorted(glob.glob(data_path))
     if debug:
-        s_maps = s_maps[::10]
+        s_maps = s_maps[::100]
 
     with multiprocessing.Pool(os.cpu_count()) as p:
-        data = p.starmap(_load_map_data, zip(s_maps))
+        data = [d for d in tqdm(p.imap(_load_map_data, s_maps), total=len(s_maps))]
     images, poses, rays, times, focal_lengths = list(map(list, zip(*data)))
 
-    ref_wavelength = Map(s_maps[0]).wavelength.value
+    ref_wavelength = Map(s_maps[0]).wavelength.value if Map(s_maps[0]).wavelength is not None else 0
     return images, poses, rays, times, focal_lengths, ref_wavelength
 
 
 def _load_map_data(map_path):
+    simplefilter('ignore')
     s_map = Map(map_path)
     # compute focal length
     scale = s_map.scale[0]  # scale of pixels [arcsec/pixel]
