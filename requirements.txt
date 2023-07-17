@@ -1,3 +1,4 @@
 sunpy[all]
 wandb
 pytorch-lightning
+git+https://github.com/RobertJaro/InstrumentToInstrument.git
