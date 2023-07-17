@@ -59,10 +59,10 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	omega = torch.asin(s_t / s_q)
 	
 	# z = distance Q to observer
-	z = rays_o.pow(2).sum(-1).pow(0.5)
+	z = z_vals
 
     # chi = scattering angle between line of sight and SQ (dot product)
-	chi = torch.acos((rays_o * query_points).sum(-1) / (rays_o.pow(2).sum(-1).pow(0.5) * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
+	chi = torch.acos((rays_o[:, None] * query_points).sum(-1) / (rays_o.pow(2).sum(-1).pow(0.5)[:, None] * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
 	
 	# u = limb darkening coeff 
 	# TODO hard coding for now [Ramos 2023]
@@ -108,7 +108,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# emerging_intensity = intensity * total_absorption  # integrate total intensity [n_rays, n_samples - 1]
 
     # intensity (total and polarised) from all electrons
-	# for one electron * electron density * weighted by distance along LOS
+	# for one electron * electron density * weighted by line element ds- separation between sampling points
 	emerging_tB = intensity_tB * electron_density * dists
 	emerging_pB = intensity_pB * electron_density * dists
 	# sum all intensity contributions along LOS
