@@ -61,11 +61,8 @@ class FitsDataModule(LightningDataModule):
         # can correlate timesteps to files, allowing us to reconstruct the correct physics
         total_files = cor1_data + cor2_data
         all_fits_data = [self._load_fits(fname) for fname in total_files]
-        self.fits_test = np.random.choice(all_fits_data, self.n_test)
-        fits_full = np.random.choice(all_fits_data, n_train_val)
-        self.fits_train, self.fits_val = random_split(
-            fits_full, [self.n_train, self.n_val]
-        )
+        self.fits_train, self.fits_val, self.fits_test = random_split(
+            all_fits_data, [self.n_train, self.n_val, self.n_test])
 
     def train_dataloader(self):
         return DataLoader(self.fits_train, batch_size=self.batch_size)
