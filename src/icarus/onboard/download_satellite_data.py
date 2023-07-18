@@ -370,7 +370,7 @@ if __name__ == "__main__":
 for time_batch, event_batch in zip(timeseries_batches, event_batches):
     min_time = pd.to_datetime(np.min(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
     max_time =  pd.to_datetime(np.max(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
-    filename = os.path.join(event_folder, "events_{}_{}.npy".format(min_time, max_time))
+    filename = os.path.join(event_folder, "events_{}_{}.csv".format(min_time, max_time))
     #only saving event start and end times for now, some events are void
     if len(event_batch["hek"]):
         event_batch["hek"]["event_starttime","event_endtime"].write(filename,format='csv')
