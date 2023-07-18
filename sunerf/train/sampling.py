@@ -76,13 +76,15 @@ def sample_to_solar_surface(rays_o: torch.Tensor, rays_d: torch.Tensor, near: fl
     # Grab samples for space integration along ray
     t_vals = torch.linspace(0., 1., n_samples, device=rays_o.device)
 
+    # for occultor disc this should never happen (rays don't hit the solar surface)
     # solve quadratic equation --> find points at 1 solar radii
-    a = rays_d.pow(2).sum(-1)
-    b = (2 * rays_o * rays_d).sum(-1)
-    c = rays_o.pow(2).sum(-1) - 1 ** 2
-    dist_far = (-b - torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
+    # a = rays_d.pow(2).sum(-1)
+    # b = (2 * rays_o * rays_d).sum(-1)
+    # c = rays_o.pow(2).sum(-1) - 1 ** 2
+    # dist_far = (-b - torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
 
-    dist_far[torch.isnan(dist_far)] = projected_far[torch.isnan(dist_far)]
+    # dist_far[torch.isnan(dist_far)] = projected_far[torch.isnan(dist_far)]
+    dist_far = projected_far
 
     z_vals = projected_near[:, None] * (1. - t_vals[None]) + dist_far[:, None] * (t_vals[None])
 
@@ -95,6 +97,8 @@ def sample_to_solar_surface(rays_o: torch.Tensor, rays_d: torch.Tensor, near: fl
         z_vals = lower + (upper - lower) * t_rand[None, :]
 
     pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None]
+    print('PTC min', torch.min(pts.pow(2).sum(-1).pow(0.5)))
+    print('PTC max', torch.max(pts.pow(2).sum(-1).pow(0.5)))
     return pts, z_vals
 
 

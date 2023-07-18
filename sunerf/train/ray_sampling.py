@@ -16,12 +16,14 @@ def get_rays(height: int, width: int, ref_pixel: PixelPair, focal_length: float,
         indexing='ij')
     i, j = i.transpose(-1, -2), j.transpose(-1, -2)
 
-    directions = np.stack([(i - ref_pixel.x.value - 0.5) / focal_length,
-                           -(j - ref_pixel.y.value - 0.5) / focal_length,
+    directions = np.stack([(i - ref_pixel.x.value) / focal_length,
+                           -(j - ref_pixel.y.value) / focal_length,
                            -np.ones_like(i)], axis=-1)
 
     # Apply camera pose to directions
     rays_d = np.sum(directions[..., None, :] * c2w[:3, :3], axis=-1)
+    # TODO double check normalization
+    # rays_d = rays_d / ((rays_d ** 2).sum(-1) ** 0.5)[..., None]
 
     # Origin is same for all directions (the optical center)
     rays_o = np.tile(c2w[None, :3, -1], [rays_d.shape[0], rays_d.shape[1], 1])

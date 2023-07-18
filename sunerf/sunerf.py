@@ -179,7 +179,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-    N_GPUS = torch.cuda.device_count()
+    N_GPUS = 1#torch.cuda.device_count()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path_pB', type=str, required=True)
@@ -201,7 +201,8 @@ if __name__ == '__main__':
         config_data.update(yaml.load(stream, Loader=yaml.SafeLoader))
 
     data_module = NeRFDataModule(config_data)
-    cmap = cm.soholasco2 #if data_module.wavelength == 5200 else sdo_cmaps[data_module.wavelength]  # set global colormap # TODO
+    cmap = cm.soholasco2.copy() #if data_module.wavelength == 5200 else sdo_cmaps[data_module.wavelength]  # set global colormap # TODO
+    cmap.set_bad(color='green')
 
     sunerf = SuNeRFModule(config_data, cmap)
 
@@ -229,10 +230,11 @@ if __name__ == '__main__':
                       devices=N_GPUS,
                       accelerator='gpu' if N_GPUS >= 1 else None,
                       strategy='dp' if N_GPUS > 1 else None,  # ddp breaks memory and wandb
-                      num_sanity_val_steps=-1,  # validate all points to check the first image
+                      num_sanity_val_steps=0,  # validate all points to check the first image
                       val_check_interval=config_data["Training"]["log_every_n_steps"],
                       gradient_clip_val=0.5,
-                      callbacks=[checkpoint_callback, save_callback])
+                      callbacks=[checkpoint_callback, save_callback],
+                      )
 
     log_overview(data_module.images, data_module.poses, data_module.times, cmap)
 

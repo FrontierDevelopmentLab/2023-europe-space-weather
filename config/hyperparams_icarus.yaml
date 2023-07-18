@@ -12,8 +12,8 @@ Encoders:
 Stratified sampling:
   n_samples : 64                  # Number of spatial samples per ray
   perturb : True                  # If set, applies noise to sample positions
-  near : -340
-  far : 340
+  near : -5
+  far : 5
   non_uniform_sampling: False      # Switch between the radial sampling in which near and far are radial distances (False)
   grid_exponent : 7               # Exponent that defines how packed the grid is closer to the Sun in non-uniform sampling
   # and the box sampling with more points close to the solar surface (True)
