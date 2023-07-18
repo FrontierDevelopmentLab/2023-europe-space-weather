@@ -25,6 +25,8 @@ import numpy as np
 import pandas as pd
 import sscws
 import sunpy
+import yaml
+from rich.progress import Progress
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
@@ -277,7 +279,7 @@ if __name__ == "__main__":
         event_batches.append(resulting_events_for_batch)
 
     # Create Folders to save data to
-    # Current Working Directory
+    # TODO: change from Current Working Directory to somewhere on the drive
     cwd = os.getcwd()
     cor1_folder = os.path.join(cwd, "Data", "Cor1")
     cor2_folder = os.path.join(cwd, "Data", "Cor2")
@@ -296,24 +298,35 @@ if __name__ == "__main__":
         )
     # Download data
     filenames = []
-    for cor1_batch in cor1_batches:
-        try:
-            first_batch_downloads = Fido.fetch(
-                cor1_batch, path="{}/".format(cor1_folder)
-            )
-            filenames.append(first_batch_downloads)
-        except Exception as e:
-            logging.error(
-                "Error encountered in downloading batch for Cor1: {}".format(e)
-            )
-    for cor2_batch in cor2_batches:
-        try:
-            second_batch_downloads = Fido.fetch(
-                cor2_batch, path="{}/".format(cor2_folder)
-            )
-            filenames.append(second_batch_downloads)
-        except Exception as e:
-            logging.error(
-                "Error encountered in downloading batch for Cor1: {}".format(e)
-            )
+    """
+    with Progress() as progress:
+        Task = progress.add_task("Download Cor1 Batches", total = len(cor1_batches))
+        for cor1_batch in cor1_batches:
+            try:
+                first_batch_downloads = Fido.fetch(
+                    cor1_batch, path="{}/".format(cor1_folder), progress = False, overwrite = False
+                )
+                filenames.append(first_batch_downloads)
+            except Exception as e:
+                logging.error(
+                    "Error encountered in downloading batch for Cor1: {}".format(e)
+                )
+            progress.update(Task, advance = 1)
+    """
+    with Progress() as progress:
+        Task = progress.add_task("Download Cor2 Batches", total=len(cor2_batches))
+        for cor2_batch in cor2_batches:
+            try:
+                second_batch_downloads = Fido.fetch(
+                    cor2_batch,
+                    path="{}/".format(cor2_folder),
+                    progress=False,
+                    overwrite=False,
+                )
+                filenames.append(second_batch_downloads)
+            except Exception as e:
+                logging.error(
+                    "Error encountered in downloading batch for Cor2: {}".format(e)
+                )
+            progress.update(Task, advance=1)
     # To find data of level: fits.open as f: f[0].header
