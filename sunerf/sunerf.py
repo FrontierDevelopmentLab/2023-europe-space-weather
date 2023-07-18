@@ -68,6 +68,7 @@ class SuNeRFModule(LightningModule):
                                 'n_samples_hierarchical': self.n_samples_hierarchical,
                                 'near': near, 'far': far,
                                 'kwargs_sample_hierarchical': self.kwargs_sample_hierarchical}
+        self.scaling_kwargs = {'vmin': self.hparams['Scaling']['vmin'], 'vmax': self.hparams['Scaling']['vmax']}
         self.encoder_kwargs = {'d_input': self.hparams['Encoders']['d_input'],
                                'n_freqs': self.hparams['Encoders']['n_freqs'],
                                'log_space': self.hparams['Encoders']['log_space'], }
@@ -83,7 +84,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
         # Run one iteration of TinyNeRF and get the rendered filtergrams.
         outputs = nerf_forward(rays_o, rays_d, time, self.coarse_model, self.fine_model,
-                               encoding_fn=self.encode, **self.sampling_kwargs)
+                               encoding_fn=self.encode, **self.scaling_kwargs, **self.sampling_kwargs)
 
         # Check for any numerical issues.
         for k, v in outputs.items():
@@ -117,7 +118,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
 
         outputs = nerf_forward(rays_o, rays_d, time, self.coarse_model, self.fine_model,
-                               encoding_fn=self.encode, **self.sampling_kwargs)
+                               encoding_fn=self.encode, **self.scaling_kwargs, **self.sampling_kwargs)
 
         distance = rays_o.pow(2).sum(-1).pow(0.5).mean()
         return {'target_img': target_img,
@@ -170,6 +171,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
     os.makedirs(output_path, exist_ok=True)
     torch.save({'fine_model': sunerf.fine_model, 'coarse_model': sunerf.coarse_model,
                 'wavelength': data_module.wavelength,
+                'scaling_kwargs': sunerf.scaling_kwargs,
                 'sampling_kwargs': sunerf.sampling_kwargs, 'encoder_kwargs': sunerf.encoder_kwargs,
                 'test_kwargs': data_module.test_kwargs, 'config': config_data,
                 'start_time': unnormalize_datetime(min(data_module.times)),
@@ -179,7 +181,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-    N_GPUS = 1#torch.cuda.device_count()
+    N_GPUS = torch.cuda.device_count()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path_pB', type=str, required=True)

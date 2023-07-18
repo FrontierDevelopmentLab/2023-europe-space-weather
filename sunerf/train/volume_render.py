@@ -15,6 +15,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 				z_vals: torch.Tensor, # (batch, sampling_points, distance)
 				rays_o: torch.Tensor,
 				rays_d: torch.Tensor,
+				v_min: float, v_max: float,
 				raw_noise_std: float = 0.0
 				) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 	r"""
@@ -76,8 +77,8 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# TODO average for now (move to lookup table later)
 	I0 = 1361 / 4*torch.pi # W·sr−1·m−2 # (Prša et al., 2016)
 
-	ln = torch.log((1 + torch.sin(omega)) / (torch.cos(omega) + 1e-6))
-	cos2_sin = torch.cos(omega) ** 2 / (torch.sin(omega) + 1e-6)
+	ln = torch.log((1 + torch.sin(omega)) / (torch.cos(omega)))
+	cos2_sin = torch.cos(omega) ** 2 / (torch.sin(omega))
 	A = torch.cos(omega) * torch.sin(omega) ** 2
 	B = - (1/8) * (1 - 3 * torch.sin(omega) ** 2 - cos2_sin * (1 + 3 * torch.sin(omega) ** 2) * ln)
 	C = (4 / 3) - torch.cos(omega) - torch.cos(omega) ** 3 / 3
@@ -120,7 +121,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	pixel_density = (electron_density * dists).sum(1)[:, None]
 
 	# target images are already logged
-	v_min, v_max = -31, -13
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
 	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
@@ -163,6 +163,8 @@ def nerf_forward(rays_o: torch.Tensor,
 				 fine_model: nn.Module,
 				 near: float, 
 				 far: float,
+				 vmin: float, 
+				 vmax: float,
 				 encoding_fn: Callable[[torch.Tensor], torch.Tensor],
 				 sample_stratified: Callable[[torch.Tensor, torch.Tensor, float, float, int], Tuple[torch.Tensor, torch.Tensor]] = sample_non_uniform_box,
 				 kwargs_sample_stratified: dict = None, 
@@ -213,7 +215,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d)
+	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
@@ -239,7 +241,7 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d)
+		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d, vmin, vmax)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch

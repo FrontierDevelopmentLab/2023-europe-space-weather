@@ -97,8 +97,8 @@ def sample_to_solar_surface(rays_o: torch.Tensor, rays_d: torch.Tensor, near: fl
         z_vals = lower + (upper - lower) * t_rand[None, :]
 
     pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None]
-    print('PTC min', torch.min(pts.pow(2).sum(-1).pow(0.5)))
-    print('PTC max', torch.max(pts.pow(2).sum(-1).pow(0.5)))
+    # print('PTC min', torch.min(pts.pow(2).sum(-1).pow(0.5)))
+    # print('PTC max', torch.max(pts.pow(2).sum(-1).pow(0.5)))
     return pts, z_vals
 
 

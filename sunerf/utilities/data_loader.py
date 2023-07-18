@@ -160,18 +160,6 @@ def get_data(config_data):
     s_maps_pB = sorted(glob.glob(data_path_pB))
     s_maps_tB = sorted(glob.glob(data_path_tB))
 
-    # TODO move to data clean - need for HAO
-    # common_tB_fnames = []
-    # common_pB_fnames = []
-    # for fname_pB in s_maps_pB:
-    #     corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
-    #     if corresponding_fname_tB in s_maps_tB:
-    #         common_tB_fnames.append(glob.glob(corresponding_fname_tB))
-    #         common_pB_fnames.append(glob.glob(fname_pB))
-
-    # s_maps_pB = common_pB_fnames
-    # s_maps_tB = common_tB_fnames
-
     if debug:
         s_maps_pB = s_maps_pB[::10]
         s_maps_tB = s_maps_tB[::10]
@@ -198,6 +186,7 @@ def _load_map_data(map_path):
 
     time = normalize_datetime(s_map.date.datetime)
 
+    print('COORDS', s_map.carrington_longitude, s_map.carrington_latitude)
     pose = pose_spherical(-s_map.carrington_longitude.to(u.deg).value,
                           s_map.carrington_latitude.to(u.deg).value,
                           s_map.dsun.to(u.solRad).value).float().numpy()
@@ -227,6 +216,7 @@ def normalize_datetime(date, max_time_range=timedelta(days=30)):
     -------
     normalized date
     """
+    # TODO check this 30 days is valid for us
     return (date - datetime(2010, 1, 1)) / max_time_range * (2 * np.pi)
 
 
