@@ -369,10 +369,10 @@ if __name__ == "__main__":
 # event_batches is effectively a list of dictionaries under the hek key
 for time_batch, event_batch in zip(timeseries_batches, event_batches):
     min_time = pd.to_datetime(np.min(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
-    max_time =  pd.to_datetime(np.max(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
+    max_time = pd.to_datetime(np.max(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
     filename = os.path.join(event_folder, "events_{}_{}.csv".format(min_time, max_time))
-    #only saving event start and end times for now, some events are void
+    # only saving event start and end times for now, some events are void
     if len(event_batch["hek"]):
-        event_batch["hek"]["event_starttime","event_endtime"].write(filename,format='csv')
-
-
+        event_batch["hek"]["event_starttime", "event_endtime"].write(
+            filename, format="csv"
+        )
