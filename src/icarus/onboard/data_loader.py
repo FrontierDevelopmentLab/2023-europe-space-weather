@@ -15,9 +15,10 @@ from datetime import datetime, timedelta
 import astropy.io.fits as fits
 import numpy as np
 import torch
+import yaml
 from astropy import units as u
 from astropy.io.fits import getdata, getheader
-from pytorch_lightning import LightningDataModule
+from lightning.pytorch import LightningDataModule
 from sunpy.map import Map
 from torch.utils.data import DataLoader, Dataset, random_split
 
@@ -28,11 +29,17 @@ class FitsDataModule(LightningDataModule):
         logging.info("Load data")
 
         self.batch_size = hparams.get("Batch Size", 32)  # default to 32
+
+        cwd = os.getcwd()
+        config_path = os.path.join(cwd, "..", "..", "..", "config")
+        data_path = os.getcwd()
+        with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+            data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
         self.cor1_data_dir = hparams.get(
-            "Data Directory Cor1", os.path.join(os.getcwd(), "Data", "Cor1")
+            "Data Directory Cor1", os.path.join(data_path, "data", "cor1")
         )
         self.cor2_data_dir = hparams.get(
-            "Data Directory Cor2", os.path.join(os.getcwd(), "Data", "Cor2")
+            "Data Directory Cor2", os.path.join(data_path, "data", "cor2")
         )
 
         self.p_train = hparams.get("train percentage", 0.85)
@@ -62,7 +69,8 @@ class FitsDataModule(LightningDataModule):
         total_files = cor1_data + cor2_data
         all_fits_data = [self._load_fits(fname) for fname in total_files]
         self.fits_train, self.fits_val, self.fits_test = random_split(
-            all_fits_data, [self.n_train, self.n_val, self.n_test])
+            all_fits_data, [self.n_train, self.n_val, self.n_test]
+        )
 
     def train_dataloader(self):
         return DataLoader(self.fits_train, batch_size=self.batch_size)
