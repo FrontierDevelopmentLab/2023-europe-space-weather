@@ -207,7 +207,7 @@ if __name__ == "__main__":
         )
     )
     df_angles_perfect_fit = df.query(
-        "`Stereo AB Angle [deg]`== {}".format(earth_l5_angle_degrees)
+        "abs(`Stereo AB Angle [deg]` - {}) <= {}".format(earth_l5_angle_degrees, 1e-6)
     )
     df_stereoA_angles_fit = df.query(
         "`Stereo A Soho Angle [deg]` >= {} & `Stereo A Soho Angle [deg]` <= {}".format(
@@ -281,8 +281,12 @@ if __name__ == "__main__":
     # Create Folders to save data to
     # TODO: change from Current Working Directory to somewhere on the drive
     cwd = os.getcwd()
-    cor1_folder = os.path.join(cwd, "Data", "Cor1")
-    cor2_folder = os.path.join(cwd, "Data", "Cor2")
+    config_path = os.path.join(cwd, "..", "..", "..", "config")
+    data_path = os.getcwd()
+    with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+        data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
+    cor1_folder = os.path.join(data_path, "data", "cor1")
+    cor2_folder = os.path.join(data_path, "data", "cor2")
     try:
         os.makedirs(cor1_folder, exist_ok=True, mode=0o777)
     except OSError as e:
@@ -297,22 +301,25 @@ if __name__ == "__main__":
             "Error when creating Cor2 Folder = {} - {}".format(cor2_folder, e)
         )
     # Download data
-    filenames = []
-    """
+    filenames_c1 = []
+    filenames_c2 = []
     with Progress() as progress:
-        Task = progress.add_task("Download Cor1 Batches", total = len(cor1_batches))
+        Task = progress.add_task("Download Cor1 Batches", total=len(cor1_batches))
         for cor1_batch in cor1_batches:
             try:
                 first_batch_downloads = Fido.fetch(
-                    cor1_batch, path="{}/".format(cor1_folder), progress = False, overwrite = False
+                    cor1_batch,
+                    path="{}/".format(cor1_folder),
+                    progress=False,
+                    overwrite=False,
                 )
-                filenames.append(first_batch_downloads)
+                filenames_c1.extend(first_batch_downloads)
             except Exception as e:
                 logging.error(
                     "Error encountered in downloading batch for Cor1: {}".format(e)
                 )
-            progress.update(Task, advance = 1)
-    """
+            progress.update(Task, advance=1)
+
     with Progress() as progress:
         Task = progress.add_task("Download Cor2 Batches", total=len(cor2_batches))
         for cor2_batch in cor2_batches:
@@ -323,10 +330,30 @@ if __name__ == "__main__":
                     progress=False,
                     overwrite=False,
                 )
-                filenames.append(second_batch_downloads)
+                filenames_c2.extend(second_batch_downloads)
             except Exception as e:
                 logging.error(
                     "Error encountered in downloading batch for Cor2: {}".format(e)
                 )
             progress.update(Task, advance=1)
     # To find data of level: fits.open as f: f[0].header
+    # Files may not be completely downloaded. If Fido is provided with a filename it has already loaded, it will not try to redownload it.
+    # Pass downloaded files into Fido as a new fetch.
+    try:
+        second_batch_downloads = Fido.fetch(
+            filenames_c2,
+            path="{}/".format(cor2_folder),
+            progress=False,
+            overwrite=False,
+        )
+    except Exception as e:
+        logging.error("Error encountered in downloading batch for Cor2: {}".format(e))
+    try:
+        second_batch_downloads = Fido.fetch(
+            filenames_c1,
+            path="{}/".format(cor1_folder),
+            progress=False,
+            overwrite=False,
+        )
+    except Exception as e:
+        logging.error("Error encountered in downloading batch for Cor1: {}".format(e))
