@@ -287,11 +287,18 @@ if __name__ == "__main__":
         data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
     cor1_folder = os.path.join(data_path, "data", "cor1")
     cor2_folder = os.path.join(data_path, "data", "cor2")
+    event_folder = os.path.join(data_path, "data", "events")
     try:
         os.makedirs(cor1_folder, exist_ok=True, mode=0o777)
     except OSError as e:
         logging.error(
             "Error when creating Cor1 Folder = {} - {}".format(cor1_folder, e)
+        )
+    try:
+        os.makedirs(event_folder, exist_ok=True, mode=0o777)
+    except OSError as e:
+        logging.error(
+            "Error when creating event Folder = {} - {}".format(event_folder, e)
         )
 
     try:
@@ -357,3 +364,11 @@ if __name__ == "__main__":
         )
     except Exception as e:
         logging.error("Error encountered in downloading batch for Cor1: {}".format(e))
+
+# CME Event handling
+# event_batches is effectively a list of dictionaries under the hek key
+for time_batch, event_batch in zip(timeseries_batches, event_batches):
+    min_time = np.min(time_batch).strftime("%Y_%m_%d_%H_%M_%S")
+    max_time = np.max(time_batch).strftime("%Y_%m_%d_%H_%M_%S")
+    filename = os.path.join(event_folder, "events_{}_{}.npy".format(min_time, max_time))
+    np.save(event_batch["hek"], filename)
