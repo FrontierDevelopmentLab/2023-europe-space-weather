@@ -124,8 +124,9 @@ class SuNeRFModule(LightningModule):
         return {'target_img': target_img,
                 'channel_map': outputs['pixel_B'],
                 'channel_map_coarse': outputs['pixel_B_0'],
-                'height_map': outputs['pixel_B'][..., 0], # TODO resolve quick fix
-                'absorption_map': outputs['pixel_B'][..., 0], # TODO resolve quick fix
+                'height_map_sun': outputs['height_map_sun'],
+                'height_map_obs': outputs['height_map_obs'],
+                'density_map':    outputs['density_map'],
                 'z_vals_stratified': outputs['z_vals_stratified'],
                 'z_vals_hierarchical': outputs['z_vals_hierarchical'],
                 'distance': distance}
@@ -134,8 +135,9 @@ class SuNeRFModule(LightningModule):
         target_img = torch.cat([o['target_img'] for o in outputs])
         channel_map = torch.cat([o['channel_map'] for o in outputs])
         channel_map_coarse = torch.cat([o['channel_map_coarse'] for o in outputs])
-        height_map = torch.cat([o['height_map'] for o in outputs])
-        absorption_map = torch.cat([o['absorption_map'] for o in outputs])
+        height_map_sun = torch.cat([o['height_map_sun'] for o in outputs])
+        height_map_obs = torch.cat([o['height_map_obs'] for o in outputs])
+        density_map = torch.cat([o['density_map'] for o in outputs])
         z_vals_stratified = torch.cat([o['z_vals_stratified'] for o in outputs])
         z_vals_hierarchical = torch.cat([o['z_vals_hierarchical'] for o in outputs])
 
@@ -143,14 +145,15 @@ class SuNeRFModule(LightningModule):
         target_img = target_img.view(wh, wh, target_img.shape[1]).cpu().numpy()
         channel_map = channel_map.view(wh, wh, channel_map.shape[1]).cpu().numpy()
         channel_map_coarse = channel_map_coarse.view(wh, wh, channel_map_coarse.shape[1]).cpu().numpy()
-        height_map = height_map.view(wh, wh).cpu().numpy()
-        absorption_map = absorption_map.view(wh, wh).cpu().numpy()
+        height_map_sun = height_map_sun.view(wh, wh, -1).cpu().numpy()
+        height_map_obs = height_map_obs.view(wh, wh, -1).cpu().numpy()
+        density_map = density_map.view(wh, wh, -1).cpu().numpy()
         z_vals_stratified = z_vals_stratified.view(wh, wh, -1).cpu().numpy()
         z_vals_hierarchical = z_vals_hierarchical.view(wh, wh, -1).cpu().numpy()
         distance = outputs[0]['distance'].cpu().numpy().mean()
 
         # TODO move plotting to separate plot callback
-        plot_samples(channel_map, channel_map_coarse, height_map, absorption_map, target_img, z_vals_stratified,
+        plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs, density_map, target_img, z_vals_stratified,
                      z_vals_hierarchical, distance=distance, cmap=self.cmap)
 
         val_loss = ((channel_map - target_img) ** 2).mean()
@@ -214,9 +217,10 @@ if __name__ == '__main__':
         logging.info(f'Load checkpoint: {chk_path}')
         sunerf.load_state_dict(torch.load(chk_path, map_location=torch.device('cpu'))['state_dict'])
 
+    # save last and best
     checkpoint_callback = ModelCheckpoint(dirpath=args.path_to_save,
-                                          save_top_k=5,
-                                          monitor='train/loss',
+                                          save_top_k=1,
+                                          monitor='train/loss', save_last=True,
                                           every_n_train_steps=config_data["Training"]["log_every_n_steps"])
 
     logger = WandbLogger(project=args.wandb_project, offline=False, entity="ssa_live_twin",
@@ -232,7 +236,7 @@ if __name__ == '__main__':
                       devices=N_GPUS,
                       accelerator='gpu' if N_GPUS >= 1 else None,
                       strategy='dp' if N_GPUS > 1 else None,  # ddp breaks memory and wandb
-                      num_sanity_val_steps=0,  # validate all points to check the first image
+                      num_sanity_val_steps=-1,  # validate all points to check the first image
                       val_check_interval=config_data["Training"]["log_every_n_steps"],
                       gradient_clip_val=0.5,
                       callbacks=[checkpoint_callback, save_callback],
@@ -241,5 +245,5 @@ if __name__ == '__main__':
     log_overview(data_module.images, data_module.poses, data_module.times, cmap)
 
     logging.info('Start model training')
-    trainer.fit(sunerf, data_module)
+    trainer.fit(sunerf, data_module, ckpt_path='/mnt/ground-data/training/HAO_v1/epoch=1-step=140000.ckpt') # "last"
     trainer.save_checkpoint(os.path.join(args.path_to_save, 'final.ckpt'))

@@ -12,27 +12,41 @@ from astropy import units as u
 from sunerf.utilities.data_loader import unnormalize_datetime
 
 
-def plot_samples(channel_map, channel_map_coarse, height_map, absorption_map, testimg, z_vals_stratified,
+def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs, density_map, testimg, z_vals_stratified,
                  z_vals_hierach, distance, cmap):
     # Log example images on wandb
     # # Plot example outputs
 
-    fig, ax = plt.subplots(1, 6, figsize=(30, 4))
+    fig, ax = plt.subplots(4, 3, figsize=(20, 15))
 
-    ax[0].imshow(testimg[..., 0], cmap=cmap, norm=sdo_img_norm)
-    ax[0].set_title(f'Target')
-    ax[1].imshow(channel_map[..., 0], cmap=cmap, norm=sdo_img_norm)
-    ax[1].set_title(f'Prediction')
-    ax[2].imshow(channel_map_coarse[..., 0], cmap=cmap, norm=sdo_img_norm)
-    ax[2].set_title(f'Coarse')
-    ax[3].imshow(height_map, cmap='plasma') #TODO , vmin=1, vmax=1.3)
-    ax[3].set_title(f'Emission Height')
-    ax[4].imshow(absorption_map, cmap='viridis' )#TODO, vmin=0)
-    ax[4].set_title(f'Absorption')
+    # tB
+    ax[0,0].imshow(testimg[..., 0], cmap=cmap, norm=sdo_img_norm)
+    ax[0,0].set_title(f'Target tB')
+    ax[0,1].imshow(channel_map[..., 0], cmap=cmap, norm=sdo_img_norm)
+    ax[0,1].set_title(f'Prediction tB')
+    ax[0,2].imshow(channel_map_coarse[..., 0], cmap=cmap, norm=sdo_img_norm)
+    ax[0,2].set_title(f'Coarse tB')
 
+    # pB
+    ax[1,0].imshow(testimg[..., 1], cmap=cmap, norm=sdo_img_norm)
+    ax[1,0].set_title(f'Target pB')
+    ax[1,1].imshow(channel_map[..., 1], cmap=cmap, norm=sdo_img_norm)
+    ax[1,1].set_title(f'Prediction pB')
+    ax[1,2].imshow(channel_map_coarse[..., 1], cmap=cmap, norm=sdo_img_norm)
+    ax[1,2].set_title(f'Coarse pB')
+
+    # height and density maps # TODO 
+    ax[2,0].imshow(height_map_sun[..., 0], cmap='plasma') #TODO , vmin=1, vmax=1.3)
+    ax[2,0].set_title(f'Height from Sun')
+    ax[2,1].imshow(height_map_obs[..., 0], cmap='plasma') #TODO , vmin=1, vmax=1.3)
+    ax[2,1].set_title(f'Height from observer')
+    ax[2,2].imshow(density_map[..., 0], cmap='viridis' )#TODO, vmin=0)
+    ax[2,2].set_title(f'Density')
+
+    # plot coarse and fine sampling
     # select index
     y, x = z_vals_stratified.shape[0] // 4, z_vals_stratified.shape[1] // 4 # select point in first quadrant
-    plot_ray_sampling(z_vals_stratified[y, x] - distance, z_vals_hierach[y, x] - distance, ax[-1])
+    plot_ray_sampling(z_vals_stratified[y, x] - distance, z_vals_hierach[y, x] - distance, ax[3,0])
 
     wandb.log({"Comparison": fig})
     plt.close('all')

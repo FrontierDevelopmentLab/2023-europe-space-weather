@@ -118,8 +118,13 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# sum all intensity contributions along LOS
 	pixel_tB = emerging_tB.sum(1)[:, None] 
 	pixel_pB = emerging_pB.sum(1)[:, None] 
-	pixel_density = (electron_density * dists).sum(1)[:, None]
-
+	
+	# height and density maps
+	# electron_density: (batch, sampling_points, 1), s_q: (batch, sampling_points, 1)
+	pixel_density = (electron_density * dists).sum(1)
+	height_from_sun = (electron_density * s_q).sum(1) / (electron_density.sum(1) + 1e-10)
+	height_from_obs = (electron_density * z).sum(1) / (electron_density.sum(1) + 1e-10)
+	
 	# target images are already logged
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
@@ -129,7 +134,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
     # need weights for sampling for fine model
 	weights = electron_density / (electron_density.sum(1)[:, None] + 1e-10)
 
-	return pixel_B, pixel_density, weights
+	return pixel_B, pixel_density, height_from_sun, height_from_obs, weights
 
 
 def cumprod_exclusive(tensor: torch.Tensor) -> torch.Tensor:
@@ -215,7 +220,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
+	pixel_B, pixel_density, height_from_sun, height_from_obs, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
@@ -241,14 +246,16 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d, vmin, vmax)
+		pixel_B, pixel_density, height_from_sun, height_from_obs, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d, vmin, vmax)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch
 		outputs['pixel_B_0'] = pixel_B_0
 
-	# compute image of absorption
+	# compute density and height maps
 	density_map = pixel_density
+	height_map_sun = height_from_sun
+	height_map_obs = height_from_obs
 
 	# compute regularization of absorption
 	# distance = query_points.pow(2).sum(-1).pow(0.5)
@@ -260,7 +267,8 @@ def nerf_forward(rays_o: torch.Tensor,
 	# Store outputs.
 	outputs['pixel_B'] = pixel_B
 	outputs['weights'] = weights
-	# outputs['height_map'] = height_map
+	outputs['height_map_sun'] = height_map_sun
+	outputs['height_map_obs'] = height_map_obs
 	outputs['density_map'] = density_map
 	# outputs['regularization'] = regularization
 	return outputs
