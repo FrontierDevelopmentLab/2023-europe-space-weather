@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import yaml
 from compressai.zoo import bmshj2018_factorized
+from data_loader import FitsDataModule
 
 # from ipywidgets import interact, widgets
 from matplotlib import cm
@@ -24,12 +25,13 @@ with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
     data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
 
 ICARUS_DIR = dirname(dirname(__file__))
-PLOT_DIR = os.path.join(data_path, "plots")
+PLOT_DIR = os.path.join(cwd, "plots")
 DATA_DIR = os.path.join(
     data_path, "data", "data"
 )  # moved "data" directory to /mnt/onboard_data/data/data
 print(DATA_DIR)
 
+one_image_test = True
 """
 The following script runs a pre-trained compression model on a secchi fits file
 by following: https://github.com/InterDigitalInc/CompressAI/blob/master/examples/CompressAI%20Inference%20Demo.ipynb
@@ -40,111 +42,118 @@ if __name__ == "__main__":
         os.makedirs(PLOT_DIR)
         print("The plot directory is created.")
 
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     # currently having the folloing error using cuda on onboard VM
     # RuntimeError: GET was unable to find an engine to execute this computation
-    device = "cpu"
+    # device = "cpu"
 
     # load a pre-trained model
     net = bmshj2018_factorized(quality=2, pretrained=True).eval().to(device)
     print(f"Parameters: {sum(p.numel() for p in net.parameters())}")
 
-    # load a fits image
-    fname = os.path.join(
-        DATA_DIR, "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
-    )
-    img_data = fits.getdata(fname)
-    # print(img_data.shape)  # 512 x 512
+    if not one_image_test:
+        # batch mode implementation ongoing
+        fits_loader = FitsDataModule().train_dataloader()
+        for batch_idx, batch in enumerate(fits_loader):
+            print(batch_idx)
 
-    # our input is gray-scaled; stack the same input three times to fake a rgb image
-    arrays = [img_data, img_data.copy(), img_data.copy()]
-    img_data_rgb = np.stack(arrays, axis=2).astype(np.int16)
-    # normalise to [0, 1]
-    img_data_normalised = (img_data_rgb - img_data_rgb.min()) / (
-        img_data_rgb.max() - img_data_rgb.min()
-    )
-    img_data_normalised = img_data_normalised.astype(np.float32)
-    # print(img_data_rgb.shape)  # 512 x 512 x 3
+    else:
+        # load a fits image
+        fname = os.path.join(
+            DATA_DIR, "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
+        )
+        img_data = fits.getdata(fname)
+        # print(img_data.shape)  # 512 x 512
 
-    # plot the original fits image as png
-    plotname = os.path.join(PLOT_DIR, "secchi_original.png")
-    plt.figure(figsize=(12, 9))
-    plt.axis("off")
-    plt.imshow(img_data_normalised)
-    plt.show()
-    plt.savefig(plotname)
+        # our input is gray-scaled; stack the same input three times to fake a rgb image
+        arrays = [img_data, img_data.copy(), img_data.copy()]
+        img_data_rgb = np.stack(arrays, axis=2).astype(np.int16)
+        # normalise to [0, 1]
+        img_data_normalised = (img_data_rgb - img_data_rgb.min()) / (
+            img_data_rgb.max() - img_data_rgb.min()
+        )
+        img_data_normalised = img_data_normalised.astype(np.float32)
+        # print(img_data_rgb.shape)  # 512 x 512 x 3
 
-    x = transforms.ToTensor()(img_data_normalised).unsqueeze(0).to(device)
-    # print(x.nelement())  # 786432
+        # plot the original fits image as png
+        plotname = os.path.join(PLOT_DIR, "secchi_original.png")
+        plt.figure(figsize=(12, 9))
+        plt.axis("off")
+        plt.imshow(img_data_normalised)
+        plt.show()
+        plt.savefig(plotname)
 
-    # # compress (also done in: out_net = net.forward(x))
-    # with torch.no_grad():
-    #     print("x", x.shape)
-    #     y = net.g_a(x)
-    #     print("y", y.shape)
-    #     y_strings = net.entropy_bottleneck.compress(y)
-    #     print("len(y_strings)=", len(y_strings))
+        x = transforms.ToTensor()(img_data_normalised).unsqueeze(0).to(device)
+        # print(x.nelement())  # 786432
 
-    # strings = [y_strings]
-    # shape = y.size()[-2:]
+        # # compress (also done in: out_net = net.forward(x))
+        # with torch.no_grad():
+        #     print("x", x.shape)
+        #     y = net.g_a(x)
+        #     print("y", y.shape)
+        #     y_strings = net.entropy_bottleneck.compress(y)
+        #     print("len(y_strings)=", len(y_strings))
 
-    # # decompress (also done in: out_net = net.forward(x))
-    # with torch.no_grad():
-    #     out_net = net.decompress(strings, shape)
-    # x_hat = out_net["x_hat"]
+        # strings = [y_strings]
+        # shape = y.size()[-2:]
 
-    # compress and decompress
-    with torch.no_grad():
-        out_net = net.forward(x)
-    out_net["x_hat"].clamp_(0, 1)
-    print(out_net.keys())
+        # # decompress (also done in: out_net = net.forward(x))
+        # with torch.no_grad():
+        #     out_net = net.decompress(strings, shape)
+        # x_hat = out_net["x_hat"]
 
-    # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
+        # compress and decompress
+        with torch.no_grad():
+            out_net = net.forward(x)
+        out_net["x_hat"].clamp_(0, 1)
+        print(out_net.keys())
 
-    # save reconstructed image
-    rec_net = transforms.ToPILImage()(out_net["x_hat"].squeeze().cpu())
+        # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
 
-    plotname = os.path.join(PLOT_DIR, "secchi_reconstructed.png")
-    plt.figure(figsize=(12, 9))
-    plt.axis("off")
-    plt.imshow(rec_net)
-    plt.show()
-    plt.savefig(plotname)
+        # save reconstructed image
+        rec_net = transforms.ToPILImage()(out_net["x_hat"].squeeze().cpu())
 
-    # comparison
-    diff = torch.mean((out_net["x_hat"] - x).abs(), axis=1).squeeze().cpu()
+        plotname = os.path.join(PLOT_DIR, "secchi_reconstructed.png")
+        plt.figure(figsize=(12, 9))
+        plt.axis("off")
+        plt.imshow(rec_net)
+        plt.show()
+        plt.savefig(plotname)
 
-    fix, axes = plt.subplots(1, 3, figsize=(16, 12))
-    for ax in axes:
-        ax.axis("off")
+        # comparison
+        diff = torch.mean((out_net["x_hat"] - x).abs(), axis=1).squeeze().cpu()
 
-    axes[0].imshow(img_data_normalised)
-    axes[0].title.set_text("Original")
+        fix, axes = plt.subplots(1, 3, figsize=(16, 12))
+        for ax in axes:
+            ax.axis("off")
 
-    axes[1].imshow(rec_net)
-    axes[1].title.set_text("Reconstructed")
+        axes[0].imshow(img_data_normalised)
+        axes[0].title.set_text("Original")
 
-    axes[2].imshow(diff, cmap="viridis")
-    axes[2].title.set_text("Difference")
+        axes[1].imshow(rec_net)
+        axes[1].title.set_text("Reconstructed")
 
-    # plot comparison of original, reconstructed and diff
-    plotname = os.path.join(PLOT_DIR, "secchi_comparison.png")
-    plt.show()
-    plt.savefig(plotname)
+        axes[2].imshow(diff, cmap="viridis")
+        axes[2].title.set_text("Difference")
 
-    with torch.no_grad():
-        # Compress:
-        print("x", x.shape)
-        y = net.g_a(x)
-        print("y", y.shape)
-        y_strings = net.entropy_bottleneck.compress(y)
-        print("len(y_strings) = ", len(y_strings[0]))
+        # plot comparison of original, reconstructed and diff
+        plotname = os.path.join(PLOT_DIR, "secchi_comparison.png")
+        plt.show()
+        plt.savefig(plotname)
 
-        strings = [y_strings]
-        shape = y.size()[-2:]
+        with torch.no_grad():
+            # Compress:
+            print("x", x.shape)
+            y = net.g_a(x)
+            print("y", y.shape)
+            y_strings = net.entropy_bottleneck.compress(y)
+            print("len(y_strings) = ", len(y_strings[0]))
 
-    with open("latents.bytes", "wb") as f:
-        f.write(strings[0][0])
+            strings = [y_strings]
+            shape = y.size()[-2:]
+
+        with open("latents.bytes", "wb") as f:
+            f.write(strings[0][0])
 
     # compute metrics
     def compute_psnr(a, b):
