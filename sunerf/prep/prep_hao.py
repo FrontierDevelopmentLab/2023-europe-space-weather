@@ -12,7 +12,7 @@ from sunpy.map.maputils import all_coordinates_from_map
 from astropy.coordinates import SkyCoord
 
 
-def _load_HAO(file_path, occ_rad=0.1 * u.AU):
+def _load_HAO(file_path):
     """
     20 solar radii (0.1 AU) -->
     Dynamic model
@@ -24,8 +24,10 @@ def _load_HAO(file_path, occ_rad=0.1 * u.AU):
     # initialise 
     header['cunit1'] = 'arcsec'  
     header['cunit2'] = 'arcsec'  
+
     header['HGLN_OBS'] = np.rad2deg(header["OBS_LON"]) # rad to deg
     header['HGLT_OBS'] = 90 - np.rad2deg(header["OBS_LAT"])
+
     header['DSUN_OBS'] = (header["OBS_R0"]*u.Rsun).to("m").value # solar radii to m
 
     header["CTYPE1"] = "HPLN-TAN"
@@ -44,23 +46,10 @@ def _load_HAO(file_path, occ_rad=0.1 * u.AU):
     #TODO: To be changed ... This is hardcoded for now, ask robert 
     header['wavelnth'] = 5200 
 
-    map_i = Map(data, header)
-    
-    pixel_coords = all_coordinates_from_map(map_i)
-    solar_center = SkyCoord(0*u.deg, 0*u.deg, frame=map_i.coordinate_frame)
-    
-    pixel_radii = np.sqrt((pixel_coords.Tx-solar_center.Tx)**2 + \
-                      (pixel_coords.Ty-solar_center.Ty)**2)
-    
-    mask_inner = pixel_radii < map_i.rsun_obs*occ_rad.to(u.R_sun).value
- 
-    masked_i = Map(map_i.data, map_i.meta, mask=mask_inner)
+    return Map(data, header)
 
-    return masked_i
-
-def _loadMLprepMap(file_path, out_path, resolution=None):
+def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
     """Load and preprocess PSI file.
-
 
     Parameters
     ----------
@@ -75,12 +64,22 @@ def _loadMLprepMap(file_path, out_path, resolution=None):
     s_map = _load_HAO(file_path)
 
     # adjust image size
-    # if resolution:
-    #     s_map = s_map.resample((resolution, resolution) * u.pix)
+    s_map = s_map.resample((resolution, resolution) * u.pix)
+
+
+    # mask occultor
+    pixel_coords = all_coordinates_from_map(s_map)
+    solar_center = SkyCoord(0*u.deg, 0*u.deg, frame=s_map.coordinate_frame)
+    
+    pixel_radii = np.sqrt((pixel_coords.Tx-solar_center.Tx)**2 + \
+                      (pixel_coords.Ty-solar_center.Ty)**2)
+    mask = pixel_radii < s_map.rsun_obs*occ_rad.to(u.R_sun).value
+
+    
+    data = s_map.data
+    data[mask] = np.nan
 
     # normalize image data
-    data = s_map.data
-    data[s_map.mask] = np.nan
     v_min, v_max = -18, -10
     data = (np.log(data) - v_min) / (v_max - v_min)
     data = data.astype(np.float32)
@@ -98,7 +97,7 @@ if __name__ == '__main__':
                    default='/mnt/ground-data/data_fits/**/*.fits',
                    help='search path for AIA maps.')
     p.add_argument('--resolution', type=float,
-                   default=1024,
+                   default=512,
                    help='target image scale in arcsec per pixel.')
     p.add_argument('--output_path', type=str,
                    default='/mnt/ground-data/prep_HAO',
@@ -108,6 +107,21 @@ if __name__ == '__main__':
     os.makedirs(args.output_path, exist_ok=True)
     # Load paths
     hao_paths = sorted(glob(args.hao_path))
+
+    common_tB_fnames = []
+    common_pB_fnames = []
+
+    # HAO: more pB files than tBs
+    s_maps_pB = [p for p in hao_paths if 'pB' in p]
+    s_maps_tB = [p for p in hao_paths if 'tB' in p]
+    
+    for fname_pB in s_maps_pB:
+        corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
+        if corresponding_fname_tB in s_maps_tB:
+            common_tB_fnames.append(corresponding_fname_tB)
+            common_pB_fnames.append(fname_pB)
+
+    hao_paths = common_pB_fnames + common_tB_fnames
 
     assert len(hao_paths) > 0, 'No files found.'
 

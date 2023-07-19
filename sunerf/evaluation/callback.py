@@ -25,9 +25,9 @@ def plot_samples(channel_map, channel_map_coarse, height_map, absorption_map, te
     ax[1].set_title(f'Prediction')
     ax[2].imshow(channel_map_coarse[..., 0], cmap=cmap, norm=sdo_img_norm)
     ax[2].set_title(f'Coarse')
-    ax[3].imshow(height_map, cmap='plasma', vmin=1, vmax=1.3)
+    ax[3].imshow(height_map, cmap='plasma') #TODO , vmin=1, vmax=1.3)
     ax[3].set_title(f'Emission Height')
-    ax[4].imshow(absorption_map, cmap='viridis', vmin=0)
+    ax[4].imshow(absorption_map, cmap='viridis' )#TODO, vmin=0)
     ax[4].set_title(f'Absorption')
 
     # select index
@@ -81,7 +81,7 @@ def log_overview(images, poses, times, cmap):
 
         ax = plt.subplot(132)
         # plot corresponding image
-        ax.imshow(img[..., 0], norm=sdo_img_norm, cmap=cmap)
+        ax.imshow(img[..., 0], norm=sdo_img_norm,  cmap=cmap)
         ax.set_axis_off()
         ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
 

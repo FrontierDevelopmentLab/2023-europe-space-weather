@@ -15,14 +15,14 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 				z_vals: torch.Tensor, # (batch, sampling_points, distance)
 				rays_o: torch.Tensor,
 				rays_d: torch.Tensor,
+				v_min: float, v_max: float,
 				raw_noise_std: float = 0.0
 				) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 	r"""
 	Convert the raw NeRF output into electron density (1 model output).
 
 	raw: output of NeRF, 2 values per sampled point
-	z_vals: distance along the ray as measure from the origin
-	        (? where origin is centre of near and far ?)
+	z_vals: distance along the ray as measure from the observer
 	"""
 
 	# Difference between consecutive elements of `z_vals`. [n_rays, n_samples]
@@ -50,7 +50,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# * I0 (intensity/ of the Sun - will vary with solar cycle - look up table?)
 	# * sigma_e (scattering constant - eqn 3)
 
-	electron_density = raw[:, :, 0]
+	electron_density = 10 ** (raw[:, :, 0] + 15)
 
     # HOWARD AND TAPPIN 2009 FIG 3
 	# working with units of solar radii
@@ -60,11 +60,10 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	omega = torch.asin(s_t / s_q)
 	
 	# z = distance Q to observer
-	z = rays_o.pow(2).sum(-1).pow(0.5)[:, None] + z_vals # distance between observer and scattering point Q
+	z = z_vals * torch.norm(rays_d[..., None, :], dim=-1) # distance between observer and scattering point Q
 
-    # chi = scattering angle between line of sight and SQ (dot product)
-	chi = torch.acos((rays_o[:, None] * query_points).sum(-1) / (rays_o.pow(2).sum(-1).pow(0.5)[:, None] * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
-	
+    # chi = scattering angle between line of sight (OS) and QS (dot product)
+	chi = torch.acos((rays_d[:, None] * query_points).sum(-1) / (rays_d.pow(2).sum(-1).pow(0.5)[:, None] * query_points.pow(2).sum(-1).pow(0.5) + 1e-6))
 	# u = limb darkening coeff 
 	# TODO hard coding for now [Ramos 2023]
 	u = 0.63
@@ -78,12 +77,14 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# TODO average for now (move to lookup table later)
 	I0 = 1361 / 4*torch.pi # W·sr−1·m−2 # (Prša et al., 2016)
 
-	ln = torch.log((1 + torch.sin(omega)) / (torch.cos(omega) + 1e-6))
-	cos2_sin = (torch.cos(omega) ** 2 / (torch.sin(omega) + 1e-6))
+	ln = torch.log((1 + torch.sin(omega)) / (torch.cos(omega)))
+	cos2_sin = torch.cos(omega) ** 2 / (torch.sin(omega))
 	A = torch.cos(omega) * torch.sin(omega) ** 2
 	B = - (1/8) * (1 - 3 * torch.sin(omega) ** 2 - cos2_sin * (1 + 3 * torch.sin(omega) ** 2) * ln)
 	C = (4 / 3) - torch.cos(omega) - torch.cos(omega) ** 3 / 3
 	D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
+
+ 	# - (1/8) * (1 - 3 * sin(omega) ** 2 - cos(omega) ** 2 / (sin(omega) + 1e-6) * (1 + 3 * sin(omega) ** 2) *  ln((1 + sin(omega)) / (cos(omega) + 1e-6)))
 
     # equations 23, 24, 29
 	intensity_T = I0 * torch.pi * sigma_e  / (2 * z ** 2) * ((1 - u) * C + u * D)
@@ -111,11 +112,8 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
     # intensity (total and polarised) from all electrons
 	# for one electron * electron density * weighted by line element ds- separation between sampling points
-	#print('Intensities', intensity_tB[0], intensity_pB[0], torch.sum(dists, 1))
 	emerging_tB = intensity_tB * electron_density * dists
 	emerging_pB = intensity_pB * electron_density * dists
-
-	print(intensity_tB * dists)
 
 	# sum all intensity contributions along LOS
 	pixel_tB = emerging_tB.sum(1)[:, None] 
@@ -123,7 +121,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	pixel_density = (electron_density * dists).sum(1)[:, None]
 
 	# target images are already logged
-	v_min, v_max = -18, -10
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
 	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
@@ -166,6 +163,8 @@ def nerf_forward(rays_o: torch.Tensor,
 				 fine_model: nn.Module,
 				 near: float, 
 				 far: float,
+				 vmin: float, 
+				 vmax: float,
 				 encoding_fn: Callable[[torch.Tensor], torch.Tensor],
 				 sample_stratified: Callable[[torch.Tensor, torch.Tensor, float, float, int], Tuple[torch.Tensor, torch.Tensor]] = sample_non_uniform_box,
 				 kwargs_sample_stratified: dict = None, 
@@ -216,7 +215,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
-	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d)
+	pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
 	outputs = {'z_vals_stratified': z_vals}
 
 	# Fine model pass.
@@ -242,7 +241,7 @@ def nerf_forward(rays_o: torch.Tensor,
 		raw = raw.reshape(list(query_points.shape[:2]) + [raw.shape[-1]])
 
 		# Perform differentiable volume rendering to re-synthesize the filtergrams.
-		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d)
+		pixel_B, pixel_density, weights = raw2outputs(raw, query_points, z_vals_combined, rays_o, rays_d, vmin, vmax)
 
 		# Store outputs.
 		outputs['z_vals_hierarchical'] = z_hierarch

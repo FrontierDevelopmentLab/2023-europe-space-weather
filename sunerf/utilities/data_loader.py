@@ -155,25 +155,14 @@ def get_data(config_data):
     data_path_pB = config_data['data_path_pB']
     data_path_tB = config_data['data_path_tB']
 
-    # 1276 tB files, 1351 pB files
+    # HEO 1276 tB files, 1351 pB files
     # can assume matching names have matching obs times and angles
     s_maps_pB = sorted(glob.glob(data_path_pB))
     s_maps_tB = sorted(glob.glob(data_path_tB))
 
-    common_tB_fnames = []
-    common_pB_fnames = []
-    for fname_pB in s_maps_pB:
-        corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
-        if corresponding_fname_tB in s_maps_tB:
-            common_tB_fnames.append(glob.glob(corresponding_fname_tB))
-            common_pB_fnames.append(glob.glob(fname_pB))
-
-    s_maps_pB = common_pB_fnames
-    s_maps_tB = common_tB_fnames
-
     if debug:
-        s_maps_pB = s_maps_pB[::100]
-        s_maps_tB = s_maps_tB[::100]
+        s_maps_pB = s_maps_pB[::10]
+        s_maps_tB = s_maps_tB[::10]
 
     with multiprocessing.Pool(os.cpu_count()) as p:
         data_pB = [d for d in tqdm(p.imap(_load_map_data, s_maps_pB), total=len(s_maps_pB))]
@@ -197,6 +186,7 @@ def _load_map_data(map_path):
 
     time = normalize_datetime(s_map.date.datetime)
 
+    print('COORDS', s_map.carrington_longitude, s_map.carrington_latitude)
     pose = pose_spherical(-s_map.carrington_longitude.to(u.deg).value,
                           s_map.carrington_latitude.to(u.deg).value,
                           s_map.dsun.to(u.solRad).value).float().numpy()
@@ -226,6 +216,7 @@ def normalize_datetime(date, max_time_range=timedelta(days=30)):
     -------
     normalized date
     """
+    # TODO check this 30 days is valid for us
     return (date - datetime(2010, 1, 1)) / max_time_range * (2 * np.pi)
 
 

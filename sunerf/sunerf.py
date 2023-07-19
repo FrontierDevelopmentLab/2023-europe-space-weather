@@ -68,6 +68,7 @@ class SuNeRFModule(LightningModule):
                                 'n_samples_hierarchical': self.n_samples_hierarchical,
                                 'near': near, 'far': far,
                                 'kwargs_sample_hierarchical': self.kwargs_sample_hierarchical}
+        self.scaling_kwargs = {'vmin': self.hparams['Scaling']['vmin'], 'vmax': self.hparams['Scaling']['vmax']}
         self.encoder_kwargs = {'d_input': self.hparams['Encoders']['d_input'],
                                'n_freqs': self.hparams['Encoders']['n_freqs'],
                                'log_space': self.hparams['Encoders']['log_space'], }
@@ -83,7 +84,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
         # Run one iteration of TinyNeRF and get the rendered filtergrams.
         outputs = nerf_forward(rays_o, rays_d, time, self.coarse_model, self.fine_model,
-                               encoding_fn=self.encode, **self.sampling_kwargs)
+                               encoding_fn=self.encode, **self.scaling_kwargs, **self.sampling_kwargs)
 
         # Check for any numerical issues.
         for k, v in outputs.items():
@@ -117,7 +118,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
 
         outputs = nerf_forward(rays_o, rays_d, time, self.coarse_model, self.fine_model,
-                               encoding_fn=self.encode, **self.sampling_kwargs)
+                               encoding_fn=self.encode, **self.scaling_kwargs, **self.sampling_kwargs)
 
         distance = rays_o.pow(2).sum(-1).pow(0.5).mean()
         return {'target_img': target_img,
@@ -170,6 +171,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
     os.makedirs(output_path, exist_ok=True)
     torch.save({'fine_model': sunerf.fine_model, 'coarse_model': sunerf.coarse_model,
                 'wavelength': data_module.wavelength,
+                'scaling_kwargs': sunerf.scaling_kwargs,
                 'sampling_kwargs': sunerf.sampling_kwargs, 'encoder_kwargs': sunerf.encoder_kwargs,
                 'test_kwargs': data_module.test_kwargs, 'config': config_data,
                 'start_time': unnormalize_datetime(min(data_module.times)),
@@ -201,7 +203,8 @@ if __name__ == '__main__':
         config_data.update(yaml.load(stream, Loader=yaml.SafeLoader))
 
     data_module = NeRFDataModule(config_data)
-    cmap = cm.soholasco2 #if data_module.wavelength == 5200 else sdo_cmaps[data_module.wavelength]  # set global colormap # TODO
+    cmap = cm.soholasco2.copy() #if data_module.wavelength == 5200 else sdo_cmaps[data_module.wavelength]  # set global colormap # TODO
+    cmap.set_bad(color='green')
 
     sunerf = SuNeRFModule(config_data, cmap)
 
@@ -229,10 +232,11 @@ if __name__ == '__main__':
                       devices=N_GPUS,
                       accelerator='gpu' if N_GPUS >= 1 else None,
                       strategy='dp' if N_GPUS > 1 else None,  # ddp breaks memory and wandb
-                      num_sanity_val_steps=-1,  # validate all points to check the first image
+                      num_sanity_val_steps=0,  # validate all points to check the first image
                       val_check_interval=config_data["Training"]["log_every_n_steps"],
                       gradient_clip_val=0.5,
-                      callbacks=[checkpoint_callback, save_callback])
+                      callbacks=[checkpoint_callback, save_callback],
+                      )
 
     log_overview(data_module.images, data_module.poses, data_module.times, cmap)
 
