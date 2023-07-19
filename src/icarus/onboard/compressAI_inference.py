@@ -8,16 +8,27 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import yaml
 from compressai.zoo import bmshj2018_factorized
-from ipywidgets import interact, widgets
+
+# from ipywidgets import interact, widgets
 from matplotlib import cm
 from PIL import Image
 from pytorch_msssim import ms_ssim
 from torchvision import transforms
 
+cwd = os.getcwd()
+data_path = cwd
+config_path = os.path.join(cwd, "..", "..", "..", "config")
+with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+    data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
+
 ICARUS_DIR = dirname(dirname(__file__))
-PLOT_DIR = os.path.join(ICARUS_DIR, "plots")
-DATA_DIR = os.path.join(ICARUS_DIR, "data")
+PLOT_DIR = os.path.join(data_path, "plots")
+DATA_DIR = os.path.join(
+    data_path, "data", "data"
+)  # moved "data" directory to /mnt/onboard_data/data/data
+print(DATA_DIR)
 
 """
 The following script runs a pre-trained compression model on a secchi fits file
@@ -120,6 +131,20 @@ if __name__ == "__main__":
     plotname = os.path.join(PLOT_DIR, "secchi_comparison.png")
     plt.show()
     plt.savefig(plotname)
+
+    with torch.no_grad():
+        # Compress:
+        print("x", x.shape)
+        y = net.g_a(x)
+        print("y", y.shape)
+        y_strings = net.entropy_bottleneck.compress(y)
+        print("len(y_strings) = ", len(y_strings[0]))
+
+        strings = [y_strings]
+        shape = y.size()[-2:]
+
+    with open("latents.bytes", "wb") as f:
+        f.write(strings[0][0])
 
     # compute metrics
     def compute_psnr(a, b):
