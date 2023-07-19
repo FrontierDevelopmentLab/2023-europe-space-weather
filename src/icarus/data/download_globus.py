@@ -1,24 +1,37 @@
+import glob
 import os
 import urllib.request
 
 from tqdm import tqdm
 
-for lat in ['040N']:
-    for lon in tqdm(range(20, 380, 20)):
-        for step in range(5, 80):
-            # pB
-            path_pB = f'data_fits/dcmer_{lon:03d}W_bang_{lat}_pB/stepnum_{step:03d}.fits'
-            dir_pB = os.path.split(f"/mnt/ground-data/{path_pB}")[0]
-            # tB
-            path_tB = f'data_fits/dcmer_{lon:03d}W_bang_{lat}_tB/stepnum_{step:03d}.fits'
-            dir_tB = os.path.split(f"/mnt/ground-data/{path_tB}")[0]
-            if os.path.exists(dir_pB) and os.path.exists(dir_tB):
-                continue
-            # pB
-            os.makedirs(dir_pB, exist_ok=True)
-            urllib.request.urlretrieve(f'https://g-824449.7a577b.6fbd.data.globus.org/{path_pB}', f"/mnt/ground-data/{path_pB}")
-            # tB
-            os.makedirs(dir_tB, exist_ok=True)
-            urllib.request.urlretrieve(f'https://g-824449.7a577b.6fbd.data.globus.org/{path_tB}', f"/mnt/ground-data/{path_tB}")
+import shutil
 
-    urllib.request.urlretrieve('https://g-824449.7a577b.6fbd.data.globus.org/sample_dens_stepnum_43.sav', '/mnt/ground-data/sample_dens_stepnum_43.sav')
+def download_data(lat, lon, step):
+    # pB
+    path_pB = f'data_fits/dcmer_{lon:03d}W_bang_{lat}_pB/stepnum_{step:03d}.fits'
+    # tB
+    path_tB = f'data_fits/dcmer_{lon:03d}W_bang_{lat}_tB/stepnum_{step:03d}.fits'
+    # create dirs
+    if not os.path.exists(f"/mnt/ground-data/{path_pB}"):
+        urllib.request.urlretrieve(f'https://g-824449.7a577b.6fbd.data.globus.org/{path_pB}', f"/mnt/ground-data/{path_pB}")
+    if not os.path.exists(f"/mnt/ground-data/{path_tB}"):
+        urllib.request.urlretrieve(f'https://g-824449.7a577b.6fbd.data.globus.org/{path_tB}', f"/mnt/ground-data/{path_tB}")
+
+if __name__ == '__main__':
+
+    for lat in ['040N', '040W']:
+        for lon in tqdm(range(20, 380, 20)):
+            dir_pB = f"/mnt/ground-data/data_fits/dcmer_{lon:03d}W_bang_{lat}_pB"
+            dir_tB = f"/mnt/ground-data/data_fits/dcmer_{lon:03d}W_bang_{lat}_tB"
+            os.makedirs(dir_pB, exist_ok=True)
+            os.makedirs(dir_tB, exist_ok=True)
+            try:
+                for step in range(5, 80):
+                    download_data(lat, lon, step)
+            except:
+                shutil.rmtree(dir_pB)
+                shutil.rmtree(dir_tB)
+                print(f'INVALID URLs: lat {lat}, lon {lon}')
+        print(f'download lat: {lat} finished')
+
+        urllib.request.urlretrieve('https://g-824449.7a577b.6fbd.data.globus.org/sample_dens_stepnum_43.sav', '/mnt/ground-data/sample_dens_stepnum_43.sav')
