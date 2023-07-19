@@ -16,7 +16,18 @@ test = [
     "coverage-badge"
 ]
 onboard = [
-    "openvino"
+    "openvino",
+    "compressai",
+    "matplotlib",
+    "ipython",
+    "rich",
+    "zeep",
+    "lxml",
+    "bs4",
+    "sunpy",
+    "sscws",
+    "pandas",
+    "astropy"
 ]
 ground = [
     "sunpy"
