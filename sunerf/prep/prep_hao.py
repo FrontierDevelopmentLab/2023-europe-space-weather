@@ -121,7 +121,7 @@ if __name__ == '__main__':
             common_tB_fnames.append(corresponding_fname_tB)
             common_pB_fnames.append(fname_pB)
 
-    hao_paths = common_pB_fnames + common_tB_fnames
+    # hao_paths = common_pB_fnames + common_tB_fnames
 
     assert len(hao_paths) > 0, 'No files found.'
 

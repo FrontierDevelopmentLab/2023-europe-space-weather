@@ -156,8 +156,14 @@ class SuNeRFModule(LightningModule):
         plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs, density_map, target_img, z_vals_stratified,
                      z_vals_hierarchical, distance=distance, cmap=self.cmap)
 
-        val_loss = ((channel_map - target_img) ** 2).mean()
-        val_ssim = structural_similarity(target_img[..., 0], channel_map[..., 0], data_range=1)
+        val_loss = np.nanmean((channel_map - target_img) ** 2)
+        mask = ~np.isnan(target_img[..., 0])     
+    
+        channel_map_copy = channel_map.copy()
+        channel_map_copy[~mask, :] = 0
+        val_ssim_tB = structural_similarity(np.nan_to_num(target_img[..., 0], nan=0), channel_map_copy[..., 0], data_range=1)
+        val_ssim_pB = structural_similarity(np.nan_to_num(target_img[..., 1], nan=0), channel_map_copy[..., 1], data_range=1)
+        val_ssim = np.mean([val_ssim_tB, val_ssim_pB])
         val_psnr = -10. * np.log10(val_loss)
         self.log("Validation Loss", val_loss)
         self.log("Validation PSNR", val_psnr)
@@ -245,5 +251,5 @@ if __name__ == '__main__':
     log_overview(data_module.images, data_module.poses, data_module.times, cmap)
 
     logging.info('Start model training')
-    trainer.fit(sunerf, data_module, ckpt_path='/mnt/ground-data/training/HAO_v1/epoch=1-step=140000.ckpt') # "last"
+    trainer.fit(sunerf, data_module)#, ckpt_path='last')
     trainer.save_checkpoint(os.path.join(args.path_to_save, 'final.ckpt'))

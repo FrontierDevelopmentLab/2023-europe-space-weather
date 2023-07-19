@@ -8,4 +8,4 @@ Training:
 Lambda:
   regularization: 1
 
-Debug: True
+Debug: False

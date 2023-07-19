@@ -11,6 +11,8 @@ from astropy import units as u
 
 from sunerf.utilities.data_loader import unnormalize_datetime
 
+# import sunpy
+# import copy
 
 def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs, density_map, testimg, z_vals_stratified,
                  z_vals_hierach, distance, cmap):
@@ -18,6 +20,27 @@ def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs
     # # Plot example outputs
 
     fig, ax = plt.subplots(4, 3, figsize=(20, 15))
+
+    channel_map = np.copy(channel_map)
+    channel_map_coarse = np.copy(channel_map_coarse)
+    height_map_sun = np.copy(height_map_sun)
+    height_map_obs = np.copy(height_map_obs)
+    density_map = np.copy(density_map)
+
+    # get mask from target image for occulter
+    mask = np.isnan(testimg[...,0])
+    channel_map[mask, :] = np.nan
+    channel_map_coarse[mask, :] = np.nan
+    height_map_sun[mask] = np.nan
+    height_map_obs[mask] = np.nan
+    density_map[mask] = np.nan
+
+    # TODO AND THEN MAKE SURE GREEN?
+    # problem is with sdo_img_norm
+    # either manual norm or plot masked circle over top
+    # cmap1 = sunpy.visualization.colormaps.cm.soholasco2.copy()
+    # cmap1 = copy.copy(sunpy.visualization.colormaps.cm.soholasco2)
+    # cmap1.set_bad(color='green')
 
     # tB
     ax[0,0].imshow(testimg[..., 0], cmap=cmap, norm=sdo_img_norm)
@@ -35,12 +58,12 @@ def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs
     ax[1,2].imshow(channel_map_coarse[..., 1], cmap=cmap, norm=sdo_img_norm)
     ax[1,2].set_title(f'Coarse pB')
 
-    # height and density maps # TODO 
-    ax[2,0].imshow(height_map_sun[..., 0], cmap='plasma') #TODO , vmin=1, vmax=1.3)
+    # height and density maps
+    ax[2,0].imshow(height_map_sun[..., 0], cmap='viridis')
     ax[2,0].set_title(f'Height from Sun')
-    ax[2,1].imshow(height_map_obs[..., 0], cmap='plasma') #TODO , vmin=1, vmax=1.3)
+    ax[2,1].imshow(height_map_obs[..., 0], cmap='viridis')
     ax[2,1].set_title(f'Height from observer')
-    ax[2,2].imshow(density_map[..., 0], cmap='viridis' )#TODO, vmin=0)
+    ax[2,2].imshow(density_map[..., 0], cmap='viridis' )
     ax[2,2].set_title(f'Density')
 
     # plot coarse and fine sampling
