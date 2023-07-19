@@ -42,7 +42,7 @@ class FitsDataModule(LightningDataModule):
             "Data Directory Cor2", os.path.join(data_path, "data", "cor2")
         )
         self.event_data_dir = hparams.get(
-            "Data Directory Event",os.path.join(data_path, "data", "events")
+            "Data Directory Event", os.path.join(data_path, "data", "events")
         )
         self.p_train = hparams.get("train percentage", 0.85)
         self.p_test = hparams.get("test percentage", 0.1)
@@ -86,27 +86,56 @@ class FitsDataModule(LightningDataModule):
     def _load_fits(fname):
         img_data = fits.getdata(fname)
         header = fits.getheader(fname)
-        img_time = header["DATE-OBS"].split(".")[0].replace("T","_").replace("-","_").replace(":","_").split("_")
-        obs_time = datetime.strptime("_".join(img_time),"%Y_%m_%d_%H_%M_%S")
-        found = 0
+        img_time = (
+            header["DATE-OBS"]
+            .split(".")[0]
+            .replace("T", "_")
+            .replace("-", "_")
+            .replace(":", "_")
+            .split("_")
+        )
+        obs_time = datetime.strptime("_".join(img_time), "%Y_%m_%d_%H_%M_%S")
+        found = False
         for f in glob.glob(self.event_data_dir):
-            times = f.split('/')[-1].split('.')[0].split('_')
-            start_time = datetime.strptime("_".join(times[1:7]),"%Y_%m_%d_%H_%M_%S")
-            end_time = datetime.strptime("_".join(times[7:]),"%Y_%m_%d_%H_%M_%S")
-            obs_in_file = (!found and (obs_time >= start_time and obs_time <= end_time))
+            times = f.split("/")[-1].split(".")[0].split("_")
+            start_time = datetime.strptime("_".join(times[1:7]), "%Y_%m_%d_%H_%M_%S")
+            end_time = datetime.strptime("_".join(times[7:]), "%Y_%m_%d_%H_%M_%S")
+            obs_in_file = (
+                (not found) and obs_time >= start_time and obs_time <= end_time
+            )
             if obs_in_file:
-                events = pd.read_csv(f,header=0)
+                events = pd.read_csv(f, header=0)
                 for l in events:
                     event_start, event_end = l
-                    event_start = event_start.split(".")[0].replace(" ","_").replace("-","_").replace(":","_").split("_")
-                    event_start = datetime.strptime("_".join(event_start),"%Y_%m_%d_%H_%M_%S")
+                    event_start = (
+                        event_start.split(".")[0]
+                        .replace(" ", "_")
+                        .replace("-", "_")
+                        .replace(":", "_")
+                        .split("_")
+                    )
+                    event_start = datetime.strptime(
+                        "_".join(event_start), "%Y_%m_%d_%H_%M_%S"
+                    )
 
-                    event_end = event_end.split(".")[0].replace(" ","_").replace("-","_").replace(":","_").split("_")
-                    event_end = datetime.strptime("_".join(event_end),"%Y_%m_%d_%H_%M_%S")
+                    event_end = (
+                        event_end.split(".")[0]
+                        .replace(" ", "_")
+                        .replace("-", "_")
+                        .replace(":", "_")
+                        .split("_")
+                    )
+                    event_end = datetime.strptime(
+                        "_".join(event_end), "%Y_%m_%d_%H_%M_%S"
+                    )
 
-                    obs_in_event = (!found and (obs_time>=event_start and obs_time<=event_end))
+                    obs_in_event = (
+                        (not found)
+                        and obs_time >= event_start
+                        and obs_time <= event_end
+                    )
                     if obs_in_event:
-                        found = 1
+                        found = True
 
         # our input is gray-scaled; stack the same input three times to fake a rgb image
         arrays = [img_data, img_data.copy(), img_data.copy()]
@@ -117,5 +146,5 @@ class FitsDataModule(LightningDataModule):
         #     img_data_rgb.max() - img_data_rgb.min()
         # )
         # img_data_normalised = img_data_normalised.astype(np.float32)
-        is_cme = found
+        is_cme = int(found)
         return img_data_rgb, is_cme
