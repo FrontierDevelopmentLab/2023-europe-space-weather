@@ -25,7 +25,7 @@ def _load_HAO(file_path, occ_rad=0.1 * u.AU):
     header['cunit1'] = 'arcsec'  
     header['cunit2'] = 'arcsec'  
     header['HGLN_OBS'] = np.rad2deg(header["OBS_LON"]) # rad to deg
-    header['HGLT_OBS'] = np.rad2deg(header["OBS_LAT"])
+    header['HGLT_OBS'] = 90 - np.rad2deg(header["OBS_LAT"])
     header['DSUN_OBS'] = (header["OBS_R0"]*u.Rsun).to("m").value # solar radii to m
 
     header["CTYPE1"] = "HPLN-TAN"
