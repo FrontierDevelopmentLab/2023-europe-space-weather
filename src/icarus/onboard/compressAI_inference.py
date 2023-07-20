@@ -1,4 +1,5 @@
 import io
+import logging
 import math
 import os
 from os.path import dirname
@@ -16,7 +17,11 @@ from data_loader import FitsDataModule
 from matplotlib import cm
 from PIL import Image
 from pytorch_msssim import ms_ssim
+from rich.progress import Progress
 from torchvision import transforms
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 cwd = os.getcwd()
 data_path = cwd
@@ -26,21 +31,60 @@ with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
 
 ICARUS_DIR = dirname(dirname(__file__))
 PLOT_DIR = os.path.join(cwd, "plots")
+CME_DIR = os.path.join(PLOT_DIR, "cme")
+OTHER_DIR = os.path.join(PLOT_DIR, "other")
 DATA_DIR = os.path.join(
     data_path, "data", "data"
 )  # moved "data" directory to /mnt/onboard_data/data/data
-print(DATA_DIR)
 
-one_image_test = True
+one_image_test = False
 """
 The following script runs a pre-trained compression model on a secchi fits file
 by following: https://github.com/InterDigitalInc/CompressAI/blob/master/examples/CompressAI%20Inference%20Demo.ipynb
 """
 
+
+def scale_minmax(image: np.ndarray) -> np.ndarray:
+    """scale_minmax
+        scales an image into a 0-1 range based on the images minimum and maximum, returns that image as float32
+    Args:
+        image (np.ndarray): image to rescale
+
+    Returns:
+        np.ndarray (float32): minmax rescaled image
+    """
+    image = image.astype(np.float32)
+    image = (image - image.min()) / (image.max() - image.min())
+
+    return image
+
+
+def compute_psnr(a, b):
+    mse = torch.mean((a - b) ** 2).item()
+    return -10 * math.log10(mse)
+
+
+def compute_msssim(a, b):
+    return ms_ssim(a, b, data_range=1.0).item()
+
+
+def compute_bpp(out_net):
+    size = out_net["x_hat"].size()
+    num_pixels = size[0] * size[2] * size[3]
+    return sum(
+        torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)
+        for likelihoods in out_net["likelihoods"].values()
+    ).item()
+
+
 if __name__ == "__main__":
-    if not os.path.exists(PLOT_DIR):
-        os.makedirs(PLOT_DIR)
-        print("The plot directory is created.")
+    if not os.path.exists(CME_DIR):
+        os.makedirs(CME_DIR)
+        print("The CME directory is created.")
+
+    if not os.path.exists(OTHER_DIR):
+        os.makedirs(OTHER_DIR)
+        print("The other directory is created.")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # currently having the folloing error using cuda on onboard VM
@@ -53,14 +97,108 @@ if __name__ == "__main__":
 
     if not one_image_test:
         # batch mode implementation ongoing
-        fits_loader = FitsDataModule().train_dataloader()
-        for batch_idx, batch in enumerate(fits_loader):
-            print(batch_idx)
+        fits_module = FitsDataModule()
+        fits_module.setup("Testing")
+        fits_loader = fits_module.val_dataloader()
+        with Progress() as progress:
+            task = progress.add_task("Batch Visualization", total=len(fits_loader))
+            for batch in fits_loader:
+                plt.close("all")
+                images, event_index, fts_file = batch
+                for i in range(images.size(0)):
+                    image_np = (
+                        images[i].numpy().transpose(1, 2, 0)
+                    )  # .astype(np.float32)
+
+                    image_stretch = 255 * scale_minmax(image_np)
+                    image_stretch = image_stretch.astype(np.uint8)
+
+                    image_pil = Image.fromarray(image_stretch)
+                    image_name = fts_file[i].split(".")[0]
+                    initial_name = image_name + ".png"
+                    is_cme = event_index[i]
+                    dir_ = CME_DIR if is_cme else OTHER_DIR
+                    plotname = os.path.join(dir_, initial_name)
+
+                    image_pil.save(plotname)
+
+                    x = images[i].to(device).unsqueeze(0) / 65535
+                    # x = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x)
+                    # Compression and Decompression
+                    with torch.no_grad():
+                        out_net = net.forward(x)
+                    out_net["x_hat"] += out_net["x_hat"].min()  # .clamp_(0, 1)
+                    # print(out_net.keys())
+                    # print(out_net["x_hat"].shape)
+
+                    rec_net = (
+                        out_net["x_hat"]
+                        .squeeze()
+                        .cpu()
+                        .detach()
+                        .numpy()
+                        .transpose((1, 2, 0))
+                    )
+                    reconstructed_name = image_name + "_reconstructed.png"
+                    plotname = os.path.join(dir_, reconstructed_name)
+                    plt.figure(figsize=(12, 9))
+                    plt.axis("off")
+                    plt.imshow(scale_minmax(rec_net))
+                    plt.show()
+                    plt.savefig(plotname)
+
+                    # comparison
+                    diff = (
+                        torch.mean((out_net["x_hat"] - x).abs(), axis=1)
+                        .squeeze()
+                        .cpu()
+                        .detach()
+                        .numpy()
+                    )
+
+                    fix, axes = plt.subplots(1, 3, figsize=(16, 12))
+                    for ax in axes:
+                        ax.axis("off")
+
+                    im = axes[0].imshow(
+                        image_np[:, :, 0]
+                    )  # Check the shape, should be the raw image
+                    # axes[0].imshow(image_pil)
+                    axes[0].title.set_text(
+                        "Original - CME present: {}".format(
+                            "Yes" if is_cme == 1 else "No"
+                        )
+                    )
+                    # fix.colorbar(im, ax=axes[0])
+
+                    im = axes[1].imshow(
+                        rec_net[:, :, 0]
+                    )  # Should be OK, just dark as the range is large
+                    axes[1].title.set_text(
+                        "Reconstructed \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
+                            compute_psnr(x, out_net["x_hat"]),
+                            compute_msssim(x, out_net["x_hat"]),
+                            compute_bpp(out_net),
+                        )
+                    )
+                    # fix.colorbar(im, ax=axes[1])
+                    im = axes[2].imshow(diff, cmap="viridis")
+                    axes[2].title.set_text("Difference")
+                    # fix.colorbar(im, ax=axes[2])
+                    # plot comparison of original, reconstructed and diff
+                    compare_name = image_name + "_comparison.png"
+                    plotname = os.path.join(dir_, compare_name)
+                    plt.show()
+                    plt.savefig(plotname)
+
+                progress.update(task, advance=1)  # update progress bar
 
     else:
         # load a fits image
         fname = os.path.join(
-            DATA_DIR, "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
+            ICARUS_DIR,
+            "data",
+            "secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts",
         )
         img_data = fits.getdata(fname)
         # print(img_data.shape)  # 512 x 512
@@ -105,8 +243,8 @@ if __name__ == "__main__":
         # compress and decompress
         with torch.no_grad():
             out_net = net.forward(x)
-        out_net["x_hat"].clamp_(0, 1)
-        print(out_net.keys())
+        # out_net["x_hat"].clamp_(0, 1)
+        # print(out_net.keys())
 
         # print(out_net["x_hat"].squeeze().cpu().nelement())  # 786432
 
@@ -156,20 +294,6 @@ if __name__ == "__main__":
             f.write(strings[0][0])
 
     # compute metrics
-    def compute_psnr(a, b):
-        mse = torch.mean((a - b) ** 2).item()
-        return -10 * math.log10(mse)
-
-    def compute_msssim(a, b):
-        return ms_ssim(a, b, data_range=1.0).item()
-
-    def compute_bpp(out_net):
-        size = out_net["x_hat"].size()
-        num_pixels = size[0] * size[2] * size[3]
-        return sum(
-            torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)
-            for likelihoods in out_net["likelihoods"].values()
-        ).item()
 
     print(f'PSNR: {compute_psnr(x, out_net["x_hat"]):.2f}dB')
     print(f'MS-SSIM: {compute_msssim(x, out_net["x_hat"]):.4f}')

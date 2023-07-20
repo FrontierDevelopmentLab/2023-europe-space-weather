@@ -24,6 +24,7 @@ from lightning.pytorch import LightningDataModule
 from sunpy.map import Map
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
+from tqdm import tqdm
 
 
 class VigilDataset(Dataset):
@@ -44,13 +45,18 @@ class VigilDataset(Dataset):
         fts_file, event = self.fts_event_items[idx]
 
         img_data = fits.getdata(fts_file)
+        # TODO: resize images to a uniform scale - 2048,2048
+        # TODO: set this up for batches instead?
+
         arrays = [img_data, img_data.copy(), img_data.copy()]
-        img_data_rgb = np.stack(arrays, axis=2).astype(np.int16)
+        img_data_rgb = np.stack(arrays, axis=2).astype(
+            np.float32
+        )  # Can't use np.int16 - use float / 65535
 
         if self.image_transforms is not None:
             img_data_rgb = self.image_transforms(img_data_rgb)
 
-        return img_data_rgb, event
+        return img_data_rgb, event, fts_file.split("/")[-1]
 
 
 class FitsDataModule(LightningDataModule):
@@ -82,6 +88,7 @@ class FitsDataModule(LightningDataModule):
                                                       Each File will have an associated integer on whether an event is present (1) or not (0)
                     "val percentage" - Default: 0.05 - Percentage of collected data from Cor1, Cor2 to be used for validation.
                                                        Each File will have an associated integer on whether an event is present (1) or not (0)
+                    "dataset" - Default: "cor2" - Dataset to use
 
         """
         super().__init__()
@@ -90,7 +97,7 @@ class FitsDataModule(LightningDataModule):
         if hparams is None:
             hparams = {}
 
-        self.batch_size = hparams.get("Batch Size", 32)  # default to 32
+        self.batch_size = hparams.get("Batch Size", 4)  # default to 4
         self.num_workers = hparams.get("num workers", 4)
 
         cwd = os.getcwd()
@@ -109,13 +116,18 @@ class FitsDataModule(LightningDataModule):
         )
         self.p_train = hparams.get("train percentage", 0.85)
         self.p_test = hparams.get("test percentage", 0.1)
-        self.p_val = hparams.get("validation percentage", 0.05)
+        self.p_val = 1 - (self.p_train + self.p_test)
 
+        self.chosen_dataset = hparams.get("dataset", "cor2")
+        self.required_shape = (
+            (2048, 2048) if self.chosen_dataset == "cor2" else (512, 512)
+        )
         # normalisation using ImageNet statistics for now, to be changed
         self.image_transforms = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                transforms.Resize(self.required_shape, antialias=True),
+                # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ]
         )
 
@@ -136,30 +148,49 @@ class FitsDataModule(LightningDataModule):
         # Should we set proportions?
         p_train = self.p_train
         p_test = self.p_test
-        p_val = self.p_val
+        p_val = 1 - (p_train + p_test)
+        p_total = p_train + p_test + p_val
+        if p_total != 1:  # Happens if we assign weights here
+            print("Percentages do not add to 1!")
+            p_train = p_train / p_total  # enforce percentage
+            p_test = p_test / p_total
+            p_val = p_val / p_total
 
-        self.n_train = int(n_total_files * p_train)
-        self.n_test = int(n_total_files * p_test)
-        self.n_val = int(n_total_files * p_val)
-
-        n_train_val = self.n_train + self.n_val
+        # self.n_train = int(n_total_files * p_train)
+        # self.n_test = int(n_total_files * p_test)
+        # self.n_val = int(n_total_files * p_val)
+        # sum_set_files = self.n_train+self.n_test + self.n_val
+        # assert n_total_files == sum_set_files, "Sum of input lengths does not equal the length of the input set - {}+{}+{} = {} != {}".format(self.n_train,self.n_test,self.n_val,sum_set_files,n_total_files)
 
         # There is a bit of time correlation here
         # - frankly, not important as long as timestamps are used to handle files, ie
         # can correlate timesteps to files, allowing us to reconstruct the correct physics
-        total_files = cor1_data + cor2_data
-        all_fits_data = [
-            self._load_fits_fileinfo_and_events(fname) for fname in total_files
-        ]
+        total_files = cor2_data if self.chosen_dataset == "cor2" else cor1_data
+
+        # print(total_files)
+
+        # Check if image list exists
+        if not os.path.exists("filenames_and_events.csv"):
+            all_fits_data = [
+                self._load_fits_fileinfo_and_events(fname) for fname in total_files
+            ]
+            df = pd.DataFrame(all_fits_data)
+            df.to_csv("filenames_and_events.csv")
+        else:
+            all_fits_data = pd.read_csv(
+                "filenames_and_events.csv", header=0, index_col=0
+            )
+            all_fits_data = [(file, event) for file, event in all_fits_data.to_numpy()]
 
         fits_train, fits_val, fits_test = random_split(
-            all_fits_data, [self.n_train, self.n_val, self.n_test]
+            all_fits_data, [p_train, p_val, p_test]
         )
         self.train_data = VigilDataset(
             fits_train, image_transforms=self.image_transforms
         )
         self.test_data = VigilDataset(fits_test, image_transforms=self.image_transforms)
         self.val_data = VigilDataset(fits_val, image_transforms=self.image_transforms)
+        print("Datasets set up")
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -208,18 +239,21 @@ class FitsDataModule(LightningDataModule):
             .replace(":", "_")
             .split("_")
         )
+        # print("Image Time: {}".format(img_time))
         obs_time = datetime.strptime("_".join(img_time), "%Y_%m_%d_%H_%M_%S")
         found = False
-        for f in glob.glob(self.event_data_dir):
+        for f in glob.glob(self.event_data_dir + "/*.csv"):
             times = f.split("/")[-1].split(".")[0].split("_")
+            # print("Filename: {} - time data: {}".format(f, times))
             start_time = datetime.strptime("_".join(times[1:7]), "%Y_%m_%d_%H_%M_%S")
             end_time = datetime.strptime("_".join(times[7:]), "%Y_%m_%d_%H_%M_%S")
             obs_in_file = (
                 (not found) and obs_time >= start_time and obs_time <= end_time
             )
             if obs_in_file:
-                events = pd.read_csv(f, header=0)
-                for l in events:
+                events = pd.read_csv(f, header=0, sep=",")
+                for l in events.to_numpy():
+                    # print("Line: {} - Linecount: {}".format(l, len(l)))
                     event_start, event_end = l
                     event_start = (
                         event_start.split(".")[0]
