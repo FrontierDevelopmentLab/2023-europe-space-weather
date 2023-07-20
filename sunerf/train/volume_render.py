@@ -197,6 +197,7 @@ def nerf_forward(rays_o: torch.Tensor,
 		"""
 
 	# vol_render = volume_render()
+	#print("FIRST LAST INPUTS", rays_o[0], rays_d[0], rays_o[-1], rays_d[-1], times[0], near, far, vmin, vmax, kwargs_sample_stratified, n_samples_hierarchical, kwargs_sample_hierarchical)
 
 	# Set no kwargs if none are given.
 	if kwargs_sample_stratified is None:
@@ -222,7 +223,7 @@ def nerf_forward(rays_o: torch.Tensor,
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
 	pixel_B, pixel_density, height_from_sun, height_from_obs, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
 	outputs = {'z_vals_stratified': z_vals}
-
+	
 	# Fine model pass.
 	if n_samples_hierarchical > 0:
 		# Save previous outputs to return.

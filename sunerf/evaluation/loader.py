@@ -20,6 +20,7 @@ class SuNeRFLoader:
 
         state = torch.load(state_path)
         self.sampling_kwargs = state['sampling_kwargs']
+        self.scaling_kwargs = state['scaling_kwargs']
         self.resolution = resolution if resolution is not None else state['test_kwargs']['resolution']
         self.focal = focal if focal is not None else state['test_kwargs']['focal']
         self.wavelength = state['wavelength']
@@ -27,7 +28,7 @@ class SuNeRFLoader:
         self.end_time = state['end_time']
         self.config = state['config']
 
-        encoder = PositionalEncoder(**state['encoder_kwargs'])
+        encoder = PositionalEncoder(**state['encoder_kwargs'], scale_factor=340) # TODO DON'T HARD CODE Yy
         self.encoding_fn = lambda x: encoder(x)
         self.coarse_model = nn.DataParallel(state['coarse_model']).to(device)
         self.fine_model = nn.DataParallel(state['fine_model']).to(device)
@@ -40,7 +41,7 @@ class SuNeRFLoader:
                             strides: int = 1, batch_size: int = 4096):
         with torch.no_grad():
             # convert to pose
-            target_pose = pose_spherical(lon, lat, distance, center).numpy()
+            target_pose = pose_spherical(-lon, lat, distance, center).numpy()
             # load rays
             ref_pixel = PixelPair(x=(self.resolution - 1) / 2 * u.pix,
                                   y=(self.resolution - 1) / 2 * u.pix) if ref_pixel is None else ref_pixel
@@ -57,14 +58,15 @@ class SuNeRFLoader:
                                    torch.split(rays_d, batch_size), \
                                    torch.split(flat_time, batch_size)
 
-            outputs = {'channel_map': [], 'height_map': [], 'absorption_map': []}
+            outputs = {}
             for b_rays_o, b_rays_d, b_time in zip(rays_o, rays_d, time):
                 b_outs = nerf_forward(b_rays_o, b_rays_d, b_time, self.coarse_model, self.fine_model,
                                       encoding_fn=self.encoding_fn,
-                                      **self.sampling_kwargs)
-                outputs['channel_map'] += [b_outs['channel_map'].cpu()]
-                outputs['height_map'] += [b_outs['height_map'].cpu()]
-                outputs['absorption_map'] += [b_outs['absorption_map'].cpu()]
-            outputs = {k: torch.cat(v).view(img_shape).numpy() for k, v in
+                                      **self.sampling_kwargs, **self.scaling_kwargs)
+                for k in b_outs.keys():
+                    if k not in outputs:
+                        outputs[k] = []
+                    outputs[k] += [b_outs[k].cpu()]
+            outputs = {k: torch.cat(v).view(*img_shape, -1).numpy() for k, v in
                        outputs.items()}
             return outputs

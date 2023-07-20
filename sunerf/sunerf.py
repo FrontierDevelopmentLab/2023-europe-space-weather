@@ -71,7 +71,8 @@ class SuNeRFModule(LightningModule):
         self.scaling_kwargs = {'vmin': self.hparams['Scaling']['vmin'], 'vmax': self.hparams['Scaling']['vmax']}
         self.encoder_kwargs = {'d_input': self.hparams['Encoders']['d_input'],
                                'n_freqs': self.hparams['Encoders']['n_freqs'],
-                               'log_space': self.hparams['Encoders']['log_space'], }
+                               'log_space': self.hparams['Encoders']['log_space'], 
+                               'scale_factor': self.hparams['Encoders']['scale_factor']}
 
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.model_params, lr=float(self.hparams["Optimizer"]["lr"]))
@@ -251,5 +252,5 @@ if __name__ == '__main__':
     log_overview(data_module.images, data_module.poses, data_module.times, cmap)
 
     logging.info('Start model training')
-    trainer.fit(sunerf, data_module)#, ckpt_path='last')
+    trainer.fit(sunerf, data_module, ckpt_path='last')
     trainer.save_checkpoint(os.path.join(args.path_to_save, 'final.ckpt'))

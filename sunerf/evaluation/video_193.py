@@ -40,7 +40,7 @@ points_3 = zip(np.linspace(0, 180, n_points),
 points = list(points_1) + list(points_2) + list(points_3)
 
 for i, (lat, lon, time, d) in tqdm(list(enumerate(points)), total=len(points)):
-    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=4096 * 1, strides=4)
+    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=4096 * 1, strides=1)
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
     axs[0].imshow(outputs['channel_map'], cmap=cmap, vmin=0, vmax=1, origin='lower')
     axs[1].imshow(outputs['height_map'], cmap='plasma', vmin=1, vmax=1.2, origin='lower')
