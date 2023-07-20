@@ -102,26 +102,28 @@ if __name__ == '__main__':
     p.add_argument('--output_path', type=str,
                    default='/mnt/ground-data/prep_HAO',
                    help='path to save the converted maps.')
+    p.add_argument('--check_matching', dest='check_matching', action='store_true')
     args = p.parse_args()
 
     os.makedirs(args.output_path, exist_ok=True)
     # Load paths
     hao_paths = sorted(glob(args.hao_path))
 
-    common_tB_fnames = []
-    common_pB_fnames = []
+    if args.check_matching:
+        common_tB_fnames = []
+        common_pB_fnames = []
 
-    # HAO: more pB files than tBs
-    s_maps_pB = [p for p in hao_paths if 'pB' in p]
-    s_maps_tB = [p for p in hao_paths if 'tB' in p]
+        # HAO: more pB files than tBs
+        s_maps_pB = [p for p in hao_paths if 'pB' in p]
+        s_maps_tB = [p for p in hao_paths if 'tB' in p]
+        
+        for fname_pB in s_maps_pB:
+            corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
+            if corresponding_fname_tB in s_maps_tB:
+                common_tB_fnames.append(corresponding_fname_tB)
+                common_pB_fnames.append(fname_pB)
     
-    for fname_pB in s_maps_pB:
-        corresponding_fname_tB = str(fname_pB).replace("pB", "tB")
-        if corresponding_fname_tB in s_maps_tB:
-            common_tB_fnames.append(corresponding_fname_tB)
-            common_pB_fnames.append(fname_pB)
-
-    hao_paths = common_pB_fnames + common_tB_fnames
+        hao_paths = common_pB_fnames + common_tB_fnames
 
     assert len(hao_paths) > 0, 'No files found.'
 
