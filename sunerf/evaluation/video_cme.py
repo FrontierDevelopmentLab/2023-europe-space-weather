@@ -12,6 +12,8 @@ from sunerf.data.utils import sdo_cmaps
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
+from sunpy.map import Map
+
 from datetime import timedelta
 
 from IPython.display import HTML
@@ -30,42 +32,45 @@ os.makedirs(video_path, exist_ok=True)
 # init loader
 loader = SuNeRFLoader(chk_path, resolution=512)
 cmap = cm.soholasco2.copy()
-cmap.set_bad(color='white') # green
+cmap.set_bad(color='black') # green
 
-time = loader.start_time + timedelta(days=1)
+time = loader.start_time + timedelta(days=0.7)
 
 au = (1 * u.AU).to(u.solRad).value
-n_points = 10
+n_points = 40
 
-# over lons
+# start from vigil - let errupt
 points_1 = zip(np.ones(n_points) * 0,
-               np.linspace(0, 360, n_points),
+               np.ones(n_points) * -190,
+               pd.date_range(loader.start_time, time, n_points),
+               np.ones(n_points) * 1 * au)
+
+# pan around to Earth
+points_2 = zip(np.ones(n_points) * 0,
+               np.linspace(-190, -130, n_points),
                [time] * n_points,
                np.ones(n_points) * 1 * au)
 
-# over lats
-points_2 = zip(np.linspace(0, 360, n_points),
-               np.ones(n_points) * 0,
-               [time] * n_points,
-               np.ones(n_points) * 1 * au)
-
-# zoom (distance of observe) or watch forward in time from same point
+# get hit by the CME
 points_3 = zip(np.ones(n_points) * 0,
-               np.linspace(0, 60, n_points),
-               pd.date_range(time, loader.start_time, n_points),
+               np.ones(n_points) * -130,
+               pd.date_range(time, loader.end_time, n_points),
                np.ones(n_points) * 1 * au)
 
-points_4 = zip(np.ones(n_points) * 0,
-               np.linspace(60, -60, n_points),
-               pd.date_range(loader.start_time, loader.end_time, n_points),
-               np.ones(n_points) * 1 * au)
 
 # combine coordinates
-points = list(points_1) + list(points_2) + list(points_3) + list(points_4)
+points = [] #list(points_1) + list(points_2) + list(points_3)
+strides = 1
+
+# manually add mask base on target example image
+mask = np.isnan(Map('/mnt/ground-data/prep_HAO/dcmer_020W_bang_0000_pB_stepnum_005.fits').data)
+mask = mask[::strides, ::strides]
 
 for i, (lat, lon, time, d) in tqdm(list(enumerate(points)), total=len(points)):
-    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=4096 * 1, strides=1)
+    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=4096 * torch.cuda.device_count(), strides=strides)
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    outputs['pixel_B'][mask] = np.nan
+    outputs['density_map'][mask] = np.nan
     axs[0].imshow(outputs['pixel_B'][..., 0], cmap=cmap, vmin=0, vmax=1, origin='lower')
     axs[1].imshow(outputs['pixel_B'][..., 1], cmap=cmap, vmin=0, vmax=1, origin='lower')
     axs[2].imshow(outputs['density_map'], cmap='viridis', origin='lower')
@@ -93,45 +98,38 @@ for image in images:
 cv2.destroyAllWindows()
 video.release()
 
+#sys.exit()
 
 
-# TEST FOR KNOWN LOCATION
-lati = 0
-loni = 272.686
-timei = datetime.datetime(2010, 4, 13, 19, 40)
-di = 214.61000061 # (* u.m).to(u.solRad).value
-outputs = loader.load_observer_image(lati, loni, timei, distance=di, batch_size=4096 * 1, strides=1)
-fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-axs[0].imshow(outputs['pixel_B'][..., 0], cmap=cmap, vmin=0, vmax=1, origin='lower')
-axs[1].imshow(outputs['pixel_B'][..., 1], cmap=cmap, vmin=0, vmax=1, origin='lower')
-axs[2].imshow(outputs['density_map'], cmap='viridis', origin='lower')
-axs[0].set_axis_off(), axs[1].set_axis_off(), axs[2].set_axis_off()
-axs[0].set_title("Total Brightness")
-axs[1].set_title("Polarised Brightness")
-axs[2].set_title("Density")
-plt.tight_layout(pad=0)
-fig.savefig(os.path.join(video_path, 'test_str1.jpg'))
-plt.close(fig)
+video_path_dens = '/mnt/ground-data/training/plotting/video_cme_dens'
+os.makedirs(video_path_dens, exist_ok=True)
 
+for i, timei in enumerate(pd.date_range(loader.start_time, loader.end_time, n_points)):
+    # TEST FOR KNOWN LOCATION
+    lati = 0
+    loni = 272.686
+    di = 214.61000061 # (* u.m).to(u.solRad).value
 
+    # DENSITY SLICE
+    time = normalize_datetime(timei)
 
-time = normalize_datetime(timei)
+    query_points_npy = np.stack(np.mgrid[-100:100, -100:100, 0:1, 1:2], -1).astype(np.float32)
 
-query_points_npy = np.stack(np.mgrid[-100:100, -100:100, 0:1, 1:2], -1).astype(np.float32)
+    query_points = torch.from_numpy(query_points_npy)
+    query_points[..., -1] = time
 
-query_points = torch.from_numpy(query_points_npy)
-query_points[..., -1] = time
+    # Prepare points --> encoding.
+    enc_query_points = loader.encoding_fn(query_points.view(-1, 4))
 
-# Prepare points --> encoding.
-enc_query_points = loader.encoding_fn(query_points.view(-1, 4))
+    # Coarse model pass.
+    raw = loader.coarse_model(enc_query_points)
+    density = 10 ** raw
 
-# Coarse model pass.
-raw = loader.coarse_model(enc_query_points)
-density = 10 ** raw
+    density = density.view(query_points_npy.shape[:2])
+    #print(density.max(), density.min())
 
-density = density.view(query_points_npy.shape[:2])
-
-fig = plt.figure()
-plt.imshow(density.cpu().detach().numpy(), norm='log')
-fig.savefig(os.path.join(video_path, 'dens_slice.jpg'))
-plt.close(fig)
+    fig = plt.figure()
+    plt.imshow(density.cpu().detach().numpy(), norm='log', vmin=1e10, vmax=1e13)
+    plt.axis('off')
+    fig.savefig(os.path.join(video_path_dens, f'dens_slice_{i:03d}.jpg'))
+    plt.close(fig)
