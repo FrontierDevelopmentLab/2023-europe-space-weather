@@ -139,9 +139,8 @@ class SuNeRFModule(LightningModule):
 
         # log results to WANDB
         self.log("train/loss", loss)
-        self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'total': loss})
+        self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'continuity': continuity_loss, 'total': loss})
         self.log("Training PSNR", psnr)
-        self.log("Continuity", continuity_loss)
 
         # update learning rate and log
         if self.scheduler.get_last_lr()[0] > 5e-5:
