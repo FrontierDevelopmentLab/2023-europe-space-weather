@@ -92,6 +92,13 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
 	intensity_tB = 2 * intensity_T - intensity_pB
 
+	if torch.isnan(intensity_tB).any() or torch.isnan(intensity_pB).any():
+		cond = torch.isnan(intensity_tB) | torch.isnan(intensity_pB)
+		print(f'Invalid values in intensity_tB or intensity_pB: query points {query_points[cond]}')
+		# remove nan values (where omega close to 0)
+		intensity_tB = torch.nan_to_num(intensity_tB, nan=0.0, posinf=0.0, neginf=0.0)
+		intensity_pB = torch.nan_to_num(intensity_pB, nan=0.0, posinf=0.0, neginf=0.0)
+
 	# emission ([..., 0]; epsilon(z)) and absorption ([..., 1]; kappa(z)) coefficient per unit volume
 	# dtau = - kappa dz
 	# I' / I = - kappa dz --> I' emerging intensity; I incident intensity;
