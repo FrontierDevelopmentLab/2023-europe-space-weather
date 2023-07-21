@@ -29,7 +29,7 @@ Model:
   use_fine_model : True   # If set, creates a fine model
   d_filter_fine : 512     # Dimensions of linear layer filters of fine network
   n_layers_fine : 8       # Number of layers in fine network bottleneck
-  d_output : 1 # electron density
+  d_output : 4            # electron density, velocity
 
 Hierarchical sampling:
   n_samples_hierarchical : 128   # Number of samples per ray

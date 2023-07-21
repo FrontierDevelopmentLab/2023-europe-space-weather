@@ -15,6 +15,8 @@ from torch.utils.data import Dataset, DataLoader
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.train.ray_sampling import get_rays
 
+from torch.utils.data import DataLoader, RandomSampler
+
 from warnings import simplefilter
 
 class NeRFDataModule(LightningDataModule):
@@ -40,6 +42,7 @@ class NeRFDataModule(LightningDataModule):
 
         N_GPUS = torch.cuda.device_count()
         self.batch_size = int(hparams['Training']['batch_size']) * N_GPUS
+        self.points_batch_size = int(hparams['Training']['points_batch_size']) * N_GPUS
 
         num_workers = hparams['Training']['num_workers']
         self.num_workers = num_workers if num_workers is not None else os.cpu_count() // 2
@@ -107,6 +110,7 @@ class NeRFDataModule(LightningDataModule):
         logging.info('Create data sets')
         self.valid_data = BatchesDataset(self.valid_rays, self.valid_times, self.valid_images)
         self.train_data = NumpyFilesDataset(self.train_rays, self.train_times, self.train_images)
+        self.points_data = RandomCoordinateDataset([21, 200], [np.min(times), np.max(times)], self.points_batch_size)
 
     def _flatten_data(self, rays, times, images):
         flat_rays = np.concatenate(rays)
@@ -117,7 +121,10 @@ class NeRFDataModule(LightningDataModule):
 
     def train_dataloader(self):
         # handle batching manually
-        return DataLoader(self.train_data, batch_size=None, num_workers=self.num_workers, pin_memory=True, shuffle=True)
+        ray_data_loader = DataLoader(self.train_data, batch_size=None, num_workers=self.num_workers, pin_memory=True, shuffle=True)
+        points_loader = DataLoader(self.points_data, batch_size=None, num_workers=self.num_workers, pin_memory=True,
+                                   sampler=RandomSampler(self.train_data, replacement=True, num_samples=len(self.train_data)))
+        return {'rays': ray_data_loader, 'points': points_loader}
 
     def val_dataloader(self):
         # handle batching manually
@@ -232,3 +239,31 @@ def unnormalize_datetime(norm_date: float) -> datetime:
     real datetime
     """
     return norm_date * timedelta(days=30) / (2 * np.pi) + datetime(2010, 1, 1)
+
+
+class RandomCoordinateDataset(Dataset):
+
+    def __init__(self, radius, times, batch_size):
+        super().__init__()
+        self.radius = radius # [[inner, outer]]
+        self.times = times # [[start, end]]
+        self.batch_size = batch_size
+        self.float_tensor = torch.FloatTensor
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, item):
+        random_coords = self.float_tensor(self.batch_size, 4).uniform_()
+        r = self.radius[0] + (self.radius[1] - self.radius[0]) * random_coords[:, 0] ** 2 # sample more points closer to inner boundary
+        theta = torch.pi * random_coords[:, 1]
+        phi = 2 * torch.pi * random_coords[:, 2]
+        t = self.times[0] + (self.times[1] - self.times[0]) * random_coords[:, 3]
+
+        x = r * torch.sin(theta) * torch.cos(phi)
+        y = r * torch.sin(theta) * torch.sin(phi)
+        z = r * torch.cos(theta)
+
+        coords = torch.stack([x, y, z, t], -1)
+
+        return coords

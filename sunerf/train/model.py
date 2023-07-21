@@ -12,7 +12,7 @@ class NeRF(nn.Module):
     def __init__(
             self,
             d_input: int = 4,
-            d_output: int = 2,
+            d_output: int = 4,
             n_layers: int = 8,
             d_filter: int = 256,
             skip: Tuple[int] = (4,),

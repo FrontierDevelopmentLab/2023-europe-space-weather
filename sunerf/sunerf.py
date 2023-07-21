@@ -15,7 +15,7 @@ from sunerf.data.utils import sdo_cmaps
 from sunerf.evaluation.callback import plot_samples, log_overview
 from sunerf.train.model import init_models
 from sunerf.train.sampling import sample_to_solar_surface, sample_non_uniform_box
-from sunerf.train.volume_render import nerf_forward
+from sunerf.train.volume_render import nerf_forward, jacobian
 from sunerf.utilities.data_loader import NeRFDataModule, unnormalize_datetime
 
 from sunpy.visualization.colormaps import cm
@@ -81,7 +81,7 @@ class SuNeRFModule(LightningModule):
         return [self.optimizer], [self.scheduler]
 
     def training_step(self, batch, batch_nb):
-        rays, time, target_img = batch
+        rays, time, target_img = batch['rays']
         rays_o, rays_d = rays[:, 0], rays[:, 1]
         # Run one iteration of TinyNeRF and get the rendered filtergrams.
         outputs = nerf_forward(rays_o, rays_d, time, self.coarse_model, self.fine_model,
@@ -97,7 +97,42 @@ class SuNeRFModule(LightningModule):
         fine_loss = torch.nn.functional.mse_loss(pred_img, target_img) # optimize fine model
         coarse_loss = torch.nn.functional.mse_loss(outputs['pixel_B_0'], target_img)  # optimize coarse model
         # regularization_loss = outputs['regularization'].mean() # suppress unconstrained regions
-        loss = fine_loss + coarse_loss #+ self.lambda_regularization * regularization_loss
+
+        query_points = batch['points']
+        query_points.requires_grad = True
+
+        query_points_enc = self.encode(query_points)
+        raw = self.fine_model(query_points_enc)
+        electron_density = 10 ** (15 + raw[..., 0])
+        velocity = raw[..., 1:]
+
+        output_vector = torch.cat([electron_density[..., None], velocity], -1)
+        jac_matrix = jacobian(output_vector, query_points)
+
+        dNe_dx = jac_matrix[:, 0, 0]
+        dVx_dx = jac_matrix[:, 1, 0]
+        dVy_dx = jac_matrix[:, 2, 0]
+        dVz_dx = jac_matrix[:, 3, 0]
+
+        dNe_dy = jac_matrix[:, 0, 1]
+        dVx_dy = jac_matrix[:, 1, 1]
+        dVy_dy = jac_matrix[:, 2, 1]
+        dVz_dy = jac_matrix[:, 3, 1]
+
+        dNe_dz = jac_matrix[:, 0, 2]
+        dVx_dz = jac_matrix[:, 1, 2]
+        dVy_dz = jac_matrix[:, 2, 2]
+        dVz_dz = jac_matrix[:, 3, 2]
+
+        dNe_dt = jac_matrix[:, 0, 3]
+        dVx_dt = jac_matrix[:, 1, 3]
+        dVy_dt = jac_matrix[:, 2, 3]
+        dVz_dt = jac_matrix[:, 3, 3]
+        
+        continuity_loss = dNe_dt + electron_density * (dVx_dx + dVy_dy + dVz_dz) + (torch.stack([dNe_dx, dNe_dy, dNe_dz], -1) * velocity).sum(-1)
+        continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
+
+        loss = fine_loss + coarse_loss + continuity_loss #+ self.lambda_regularization * regularization_loss
         #
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
@@ -106,13 +141,14 @@ class SuNeRFModule(LightningModule):
         self.log("train/loss", loss)
         self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'total': loss})
         self.log("Training PSNR", psnr)
+        self.log("Continuity", continuity_loss)
 
         # update learning rate and log
         if self.scheduler.get_last_lr()[0] > 5e-5:
             self.scheduler.step()
         self.log('Learning Rate', self.scheduler.get_last_lr()[0])
 
-        return {'loss': loss, 'train_psnrs': psnr}
+        return {'loss': loss, 'train_psnrs': psnr, 'continuity_loss': continuity_loss}
 
     def validation_step(self, batch, batch_nb):
         rays, time, target_img = batch
@@ -243,7 +279,7 @@ if __name__ == '__main__':
                       devices=N_GPUS,
                       accelerator='gpu' if N_GPUS >= 1 else None,
                       strategy='dp' if N_GPUS > 1 else None,  # ddp breaks memory and wandb
-                      num_sanity_val_steps=-1,  # validate all points to check the first image
+                      num_sanity_val_steps=0,  # validate all points to check the first image
                       val_check_interval=config_data["Training"]["log_every_n_steps"],
                       gradient_clip_val=0.5,
                       callbacks=[checkpoint_callback, save_callback],

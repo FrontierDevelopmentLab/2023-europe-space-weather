@@ -51,6 +51,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# * sigma_e (scattering constant - eqn 3)
 
 	electron_density = 10 ** (raw[:, :, 0] + 15)
+	velocity = raw[:, :, 1:]
 
     # HOWARD AND TAPPIN 2009 FIG 3
 	# working with units of solar radii
@@ -143,7 +144,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 
 	return pixel_B, pixel_density, height_from_sun, height_from_obs, weights
 
-
 def cumprod_exclusive(tensor: torch.Tensor) -> torch.Tensor:
 	"""
 	(Courtesy of https://github.com/krrish94/nerf-pytorch)
@@ -230,6 +230,8 @@ def nerf_forward(rays_o: torch.Tensor,
 	# Perform differentiable volume rendering to re-synthesize the filtergrams.
 	pixel_B, pixel_density, height_from_sun, height_from_obs, weights = raw2outputs(raw, query_points, z_vals, rays_o, rays_d, vmin, vmax)
 	outputs = {'z_vals_stratified': z_vals}
+
+
 	
 	# Fine model pass.
 	if n_samples_hierarchical > 0:
@@ -280,3 +282,12 @@ def nerf_forward(rays_o: torch.Tensor,
 	outputs['density_map'] = density_map
 	# outputs['regularization'] = regularization
 	return outputs
+
+
+def jacobian(output, coords):
+    jac_matrix = [torch.autograd.grad(output[:, i], coords,
+                                      grad_outputs=torch.ones_like(output[:, i]).to(output),
+                                      retain_graph=True, create_graph=True, allow_unused=True)[0]
+                  for i in range(output.shape[1])]
+    jac_matrix = torch.stack(jac_matrix, dim=1)
+    return jac_matrix
