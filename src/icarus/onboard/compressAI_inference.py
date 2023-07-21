@@ -2,6 +2,7 @@ import io
 import logging
 import math
 import os
+import sys
 from os.path import dirname
 
 import astropy
@@ -15,6 +16,7 @@ from data_loader import FitsDataModule
 
 # from ipywidgets import interact, widgets
 from matplotlib import cm
+from matplotlib.colors import LogNorm, PowerNorm
 from PIL import Image
 from pytorch_msssim import ms_ssim
 from rich.progress import Progress
@@ -34,7 +36,7 @@ PLOT_DIR = os.path.join(cwd, "plots")
 CME_DIR = os.path.join(PLOT_DIR, "cme")
 OTHER_DIR = os.path.join(PLOT_DIR, "other")
 DATA_DIR = os.path.join(
-    data_path, "data", "data"
+    data_path, "data", "cor2"
 )  # moved "data" directory to /mnt/onboard_data/data/data
 
 one_image_test = False
@@ -106,7 +108,7 @@ if __name__ == "__main__":
                 plt.close("all")
                 images, event_index, fts_file = batch
                 for i in range(images.size(0)):
-                    image_np = (
+                    image_np = np.log1p(
                         images[i].numpy().transpose(1, 2, 0)
                     )  # .astype(np.float32)
 
@@ -164,13 +166,25 @@ if __name__ == "__main__":
                         image_np[:, :, 0]
                     )  # Check the shape, should be the raw image
                     # axes[0].imshow(image_pil)
+
+                    # Estimate bits per pixel
+                    n_pixels = np.product(image_np[:, :, 0].shape)
+                    full_file_name = DATA_DIR + "/" + fts_file[i]
+                    # Assume that the data is saved next to the header, so filesize is approximately the size of the file in bytes + size of image in bytes. Therefore, n_bits = 8*(filesize - headersize)
+                    n_bits_estimate = 8 * (
+                        os.stat(full_file_name).st_size
+                        - sys.getsizeof(fits.getheader(full_file_name))
+                    )
+                    original_bits_per_pixel = np.nan
+                    if n_pixels > 0:
+                        original_bits_per_pixel = n_bits_estimate / n_pixels
                     axes[0].title.set_text(
-                        "Original - CME present: {}".format(
-                            "Yes" if is_cme == 1 else "No"
+                        "Original - CME present: {} \n Bits per Pixel: {:.3f}".format(
+                            "Yes" if is_cme == 1 else "No", original_bits_per_pixel
                         )
                     )
                     # fix.colorbar(im, ax=axes[0])
-
+                    # m.plot(norm=PowerNorm(0.5, vmin=0, vmax=1e-7, clip=True))
                     im = axes[1].imshow(
                         rec_net[:, :, 0]
                     )  # Should be OK, just dark as the range is large
@@ -182,8 +196,17 @@ if __name__ == "__main__":
                         )
                     )
                     # fix.colorbar(im, ax=axes[1])
+                    # Compute MSE
+                    mse = (
+                        torch.mean((out_net["x_hat"] - x) ** 2, axis=1)
+                        .squeeze()
+                        .cpu()
+                        .detach()
+                        .numpy()
+                        .mean()
+                    )
                     im = axes[2].imshow(diff, cmap="viridis")
-                    axes[2].title.set_text("Difference")
+                    axes[2].title.set_text("Difference - MSE: {:.6f}".format(mse))
                     # fix.colorbar(im, ax=axes[2])
                     # plot comparison of original, reconstructed and diff
                     compare_name = image_name + "_comparison.png"
