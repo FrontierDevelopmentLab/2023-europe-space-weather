@@ -27,7 +27,8 @@ onboard = [
     "sunpy",
     "sscws",
     "pandas",
-    "astropy"
+    "astropy",
+    "glymur"
 ]
 ground = [
     "sunpy"

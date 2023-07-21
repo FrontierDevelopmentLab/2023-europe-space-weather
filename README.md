@@ -51,13 +51,20 @@ pyenv local onboard
 ```
 
 This will automatically activate the `onboard` environment when you change to the repository folder.
+### Install OpenJPEG2000
+The onboard component of the code uses glymur, a library meant for JPEG2000 compression to generate comparisons. To install this, the library for OpenJPEG is going to be needed.
+In order to get this set up, you need to
+```bash
+sudo apt install python3-glymur
+```
+which will install the C library [from here](https://github.com/uclouvain/openjpeg) and configure it correctly.
 
 ### Install `icarus`
 
 With the env installed, you can install the module:
 
 ```bash
-pip install -e .[onboard,ttest]
+pip install -e .[onboard,test]
 
 # or
 
