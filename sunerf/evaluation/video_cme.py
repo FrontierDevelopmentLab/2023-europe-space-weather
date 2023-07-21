@@ -101,35 +101,3 @@ video.release()
 #sys.exit()
 
 
-video_path_dens = '/mnt/ground-data/training/plotting/video_cme_dens'
-os.makedirs(video_path_dens, exist_ok=True)
-
-for i, timei in enumerate(pd.date_range(loader.start_time, loader.end_time, n_points)):
-    # TEST FOR KNOWN LOCATION
-    lati = 0
-    loni = 272.686
-    di = 214.61000061 # (* u.m).to(u.solRad).value
-
-    # DENSITY SLICE
-    time = normalize_datetime(timei)
-
-    query_points_npy = np.stack(np.mgrid[-100:100, -100:100, 0:1, 1:2], -1).astype(np.float32)
-
-    query_points = torch.from_numpy(query_points_npy)
-    query_points[..., -1] = time
-
-    # Prepare points --> encoding.
-    enc_query_points = loader.encoding_fn(query_points.view(-1, 4))
-
-    # Coarse model pass.
-    raw = loader.coarse_model(enc_query_points)
-    density = 10 ** raw
-
-    density = density.view(query_points_npy.shape[:2])
-    #print(density.max(), density.min())
-
-    fig = plt.figure()
-    plt.imshow(density.cpu().detach().numpy(), norm='log', vmin=1e10, vmax=1e13)
-    plt.axis('off')
-    fig.savefig(os.path.join(video_path_dens, f'dens_slice_{i:03d}.jpg'))
-    plt.close(fig)

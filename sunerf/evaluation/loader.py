@@ -28,7 +28,7 @@ class SuNeRFLoader:
         self.end_time = state['end_time']
         self.config = state['config']
 
-        encoder = PositionalEncoder(**state['encoder_kwargs'], scale_factor=340) # TODO DON'T HARD CODE Yy
+        encoder = PositionalEncoder(**state['encoder_kwargs'])
         self.encoding_fn = lambda x: encoder(x)
         self.coarse_model = nn.DataParallel(state['coarse_model']).to(device)
         self.fine_model = nn.DataParallel(state['fine_model']).to(device)
