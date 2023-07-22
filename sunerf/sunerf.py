@@ -104,7 +104,7 @@ class SuNeRFModule(LightningModule):
         query_points_enc = self.encode(query_points)
         raw = self.fine_model(query_points_enc)
         electron_density = 10 ** (15 + raw[..., 0])
-        velocity = raw[..., 1:]
+        velocity = torch.tanh(raw[..., 1:]) / 3 * 250 + 50 # normalize vector-norm to 50 - 300 solar radii/ 2 days
 
         output_vector = torch.cat([electron_density[..., None], velocity], -1)
         jac_matrix = jacobian(output_vector, query_points)
@@ -132,14 +132,23 @@ class SuNeRFModule(LightningModule):
         continuity_loss = dNe_dt + electron_density * (dVx_dx + dVy_dy + dVz_dz) + (torch.stack([dNe_dx, dNe_dy, dNe_dz], -1) * velocity).sum(-1)
         continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
 
-        loss = fine_loss + coarse_loss + continuity_loss #+ self.lambda_regularization * regularization_loss
+        # regularize vectors to point radially outwards
+        # radial_regularization_loss = (velocity * query_points[..., :3]).sum(-1) / (torch.norm(velocity, dim=-1) * torch.norm(query_points[..., :3], dim=-1) + 1e-8)
+        radial_regularization_loss = velocity / (torch.norm(velocity, dim=-1, keepdim=True) + 1e-8) - query_points[..., :3] / (torch.norm(query_points[..., :3], dim=-1, keepdim=True) + 1e-8)
+        radial_regularization_loss = (torch.norm(radial_regularization_loss, dim=-1) ** 2).mean()
+
+        loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss
         #
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
 
         # log results to WANDB
         self.log("train/loss", loss)
-        self.log("Training Loss", {'coarse': coarse_loss, 'fine': fine_loss, 'continuity': continuity_loss, 'total': loss})
+        self.log("Training Loss", {'coarse': coarse_loss,
+                                   'fine': fine_loss,
+                                   'continuity': continuity_loss,
+                                   'radial': radial_regularization_loss,
+                                   'total': loss})
         self.log("Training PSNR", psnr)
 
         # update learning rate and log

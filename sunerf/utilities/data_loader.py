@@ -211,7 +211,7 @@ def _load_map_data(map_path):
     return image, pose, all_rays, time, focal
 
 
-def normalize_datetime(date, max_time_range=timedelta(days=30)):
+def normalize_datetime(date, max_time_range=timedelta(days=2)):
     """Normalizes datetime object for ML input.
 
     Time starts at 2010-01-01 with max time range == 2 pi
@@ -238,7 +238,7 @@ def unnormalize_datetime(norm_date: float) -> datetime:
     -------
     real datetime
     """
-    return norm_date * timedelta(days=30) / (2 * np.pi) + datetime(2010, 1, 1)
+    return norm_date * timedelta(days=2) / (2 * np.pi) + datetime(2010, 1, 1)
 
 
 class RandomCoordinateDataset(Dataset):

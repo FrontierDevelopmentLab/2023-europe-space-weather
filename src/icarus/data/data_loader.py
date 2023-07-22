@@ -14,6 +14,8 @@ from astropy.io.fits import getdata, getheader
 
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.train.ray_sampling import get_rays
+from sunerf.utilities.data_loader import normalize_datetime
+
 
 class NeRFDataModule(LightningDataModule):
 
@@ -237,21 +239,6 @@ def _load_map_data_(file_path, data_sim_type):
     all_rays = all_rays.reshape((-1, 2, 3))
 
     return image, pose, all_rays, time, focal
-
-
-def normalize_datetime(date, max_time_range=timedelta(days=30)):
-    """Normalizes datetime object for ML input.
-
-    Time starts at 2010-01-01 with max time range == 2 pi
-    Parameters
-    ----------
-    date: input date
-
-    Returns
-    -------
-    normalized date
-    """
-    return (date - datetime(2010, 1, 1)) / max_time_range * (2 * np.pi)
 
 
 def unnormalize_datetime(norm_date: float) -> datetime:
