@@ -54,7 +54,7 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
     densities += [density]
 
     fig = plt.figure()
-    im = plt.imshow(density, norm='log', vmin=4e24, vmax=8e26, extent=[-100, 100, -100, 100], cmap='inferno')
+    im = plt.imshow(density.T, norm='log', vmin=4e24, vmax=8e26, extent=[-100, 100, -100, 100], cmap='inferno', origin='lower')
     # overlay velocity vectors
     quiver_pos = block_reduce(query_points_npy, (4, 4, 1, 1, 1), np.mean)
     quiver_vel = block_reduce(velocity, (4, 4, 1), np.mean)
