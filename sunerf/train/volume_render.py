@@ -50,7 +50,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# * I0 (intensity/ of the Sun - will vary with solar cycle - look up table?)
 	# * sigma_e (scattering constant - eqn 3)
 
-	electron_density = 10 ** (raw[:, :, 0] + 15)
+	electron_density = raw[:, :, 0]
 	velocity = raw[:, :, 1:]
 
     # HOWARD AND TAPPIN 2009 FIG 3

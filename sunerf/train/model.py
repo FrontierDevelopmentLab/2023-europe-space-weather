@@ -77,7 +77,11 @@ class NeRF(nn.Module):
         else:
             # Simple output
             x = self.output(x)
-        return x
+
+        electron_density = 10 ** (15 + x[..., 0:1])
+        velocity = torch.tanh(x[..., 1:]) / (3 ** 0.5) * 100 + 50 # normalize vector-norm to 50 - 150 solar radii/ 2 days
+
+        return torch.cat([electron_density, velocity], -1)
 
 
 class Sine(nn.Module):

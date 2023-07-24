@@ -41,8 +41,8 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
     enc_query_points = loader.encoding_fn(query_points.view(-1, 4))
 
     raw = loader.fine_model(enc_query_points)
-    density = 10 ** (15 + raw[..., 0])
-    velocity = torch.tanh(raw[..., 1:]) / 3 * 250 + 50
+    density = raw[..., 0]
+    velocity = raw[..., 1:]
 
     density = density.view(query_points_npy.shape[:2]).cpu().detach().numpy()
     velocity = velocity.view(query_points_npy.shape[:2] + velocity.shape[-1:]).cpu().detach().numpy()
