@@ -98,6 +98,7 @@ class SuNeRFModule(LightningModule):
         coarse_loss = torch.nn.functional.mse_loss(outputs['pixel_B_0'], target_img)  # optimize coarse model
         # regularization_loss = outputs['regularization'].mean() # suppress unconstrained regions
 
+        # PINN
         query_points = batch['points']
         query_points.requires_grad = True
 
