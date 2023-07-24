@@ -12,10 +12,11 @@ python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/ground-data/prep
 # convert data
 sudo chmod -R 777 /mnt/ground-data
 rm -r /mnt/ground-data/prep_HAO
-python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_pB/*.fits"
-python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_tB/*.fits"
-python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_pB/*.fits"
-python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_tB/*.fits"
-# python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/**/*.fits"
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_pB/*.fits" --output_path "/mnt/ground-data/prep_HAO_full/"
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_tB/*.fits" --output_path "/mnt/ground-data/prep_HAO_full/"
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_pB/*.fits" --output_path "/mnt/ground-data/prep_HAO_full/"
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_tB/*.fits" --output_path "/mnt/ground-data/prep_HAO_full/"
+# python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/**/*.fits" --output_path "/mnt/ground-data/prep_HAO_full/" --check_matching
 # full training
 python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints" --data_path_pB "/mnt/ground-data/prep_HAO/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_2viewpoint_v3" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+python -m sunerf.sunerf --wandb_name "hao_pinn_allviewpoints" --data_path_pB "/mnt/ground-data/prep_HAO_full/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO_full/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_allviewpoint" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
