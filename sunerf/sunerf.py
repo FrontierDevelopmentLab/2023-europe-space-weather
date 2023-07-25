@@ -243,7 +243,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
                 'test_kwargs': data_module.test_kwargs, 'config': config_data,
                 'start_time': unnormalize_datetime(min(data_module.times)),
                 'end_time': unnormalize_datetime(max(data_module.times))},
-               save_path))
+               save_path)
 
 
 if __name__ == '__main__':
