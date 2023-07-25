@@ -52,8 +52,8 @@ class VigilDataset(Dataset):
         img_data_rgb = np.stack(arrays, axis=2).astype(
             np.float32
         )  # Can't use np.int16 - use float / 65535
-        print(img_data_rgb.shape)
-        print(fts_file.split("/")[-1])
+        # print(img_data_rgb.shape)
+        # print(fts_file.split("/")[-1])
         if self.image_transforms is not None:
             img_data_rgb = self.image_transforms(img_data_rgb)
 
@@ -120,14 +120,14 @@ class FitsDataModule(LightningDataModule):
         self.p_val = 1 - (self.p_train + self.p_test)
 
         self.chosen_dataset = hparams.get("dataset", "cor2")
-        self.required_shape = (
-            (2048, 2048) if self.chosen_dataset == "cor2" else (512, 512)
-        )
+        self.required_shape = (1024, 1024)  # (
+        #    (2048, 2048) if self.chosen_dataset == "cor2" else (512, 512)
+        # )
         # normalisation using ImageNet statistics for now, to be changed
         self.image_transforms = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.Resize(self.required_shape, antialias=True),
+                transforms.Resize(self.required_shape, antialias=True),
                 # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ]
         )
@@ -193,7 +193,7 @@ class FitsDataModule(LightningDataModule):
         # total_files = cor2_data if self.chosen_dataset == "cor2" else cor1_data
 
         total_files = self._get_filelist()
-        print("LEN FILES", total_files.shape)
+        # print("LEN FILES", total_files.shape)
 
         # Check if image list exists
         # If not: create based on total_files list
@@ -213,8 +213,8 @@ class FitsDataModule(LightningDataModule):
                 for file, event in all_fits_data.to_numpy()
                 if file in total_files
             ]
-        print(len(all_fits_data))
-        print("UNIQUE", np.unique(np.array(all_fits_data)[:, 1], return_counts=True))
+        # print(len(all_fits_data))
+        # print("UNIQUE", np.unique(np.array(all_fits_data)[:, 1], return_counts=True))
 
         fits_train, fits_val, fits_test = random_split(
             all_fits_data, [p_train, p_val, p_test]
