@@ -31,7 +31,7 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_twoviewpoints_debug_martin" --dat
 
 
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/**/*.fits" --output_path /mnt/prep_HAO_2view_background --check_matching
-python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints_background" --data_path_pB "/mnt/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_2viewpoints_backgrounds" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints_background_martin" --data_path_pB "/mnt/ground-data/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_2viewpoints_backgrounds" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
 gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_tB /mnt/ground-data/
 gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_pB /mnt/ground-data/
