@@ -52,7 +52,8 @@ class VigilDataset(Dataset):
         img_data_rgb = np.stack(arrays, axis=2).astype(
             np.float32
         )  # Can't use np.int16 - use float / 65535
-
+        print(img_data_rgb.shape)
+        print(fts_file.split("/")[-1])
         if self.image_transforms is not None:
             img_data_rgb = self.image_transforms(img_data_rgb)
 
@@ -126,7 +127,7 @@ class FitsDataModule(LightningDataModule):
         self.image_transforms = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Resize(self.required_shape, antialias=True),
+                # transforms.Resize(self.required_shape, antialias=True),
                 # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ]
         )
