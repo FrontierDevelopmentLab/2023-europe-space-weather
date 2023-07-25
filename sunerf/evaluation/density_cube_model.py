@@ -11,7 +11,8 @@ from tqdm import tqdm
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
-base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
+# base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
+base_path = '/mnt/ground-data/training/HAO_pinn_allviewpoint/'
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_density_cube')
 
@@ -26,7 +27,9 @@ ph = np.linspace(-np.pi-np.pi/128, np.pi+np.pi/128, 258)
 rr, phph = np.meshgrid(r, ph, indexing = "ij")
 theta = (0.32395396 + 2.8176386) / 2 
 # observer_offset = np.deg2rad(134.5641147025687)
-observer_offset = np.deg2rad(253)
+# observer_offset = np.deg2rad(253)
+observer_offset = np.deg2rad(180)
+# observer_offset = 0
 
 for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time, n_points)), total=n_points):
 

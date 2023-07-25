@@ -25,6 +25,8 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints" --data_path_pB "/mnt
 python -m sunerf.sunerf --wandb_name "hao_pinn_allviewpoints" --data_path_pB "/mnt/ground-data/prep_HAO_full/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO_full/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_allviewpoint" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
 
+python -m sunerf.sunerf --wandb_name "hao_pinn_twoviewpoints_debug_martin" --data_path_pB "/mnt/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_2viewpoint_background_debug" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
 # Training with background
 
 
