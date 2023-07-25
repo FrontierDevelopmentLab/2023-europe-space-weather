@@ -79,7 +79,7 @@ class NeRF(nn.Module):
             x = self.output(x)
 
         electron_density = 10 ** (15 + x[..., 0:1])
-        velocity = torch.tanh(x[..., 1:])/(3**(0.5)) * 300 #
+        velocity = torch.tanh(x[..., 1:])/(3**(0.5)) * 300
 
         return torch.cat([electron_density, velocity], -1)
 

@@ -140,10 +140,16 @@ class SuNeRFModule(LightningModule):
         
         # regularize velocity
         velocity_regularization_target = 75 # Solar Radii per 2 days
-        velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target)**2).mean()
+        velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target).abs()).mean() / 300
 
-        loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss + 1e-4*velocity_regularization_loss
-        #
+        print("continuity_loss: ", continuity_loss)
+        print("radial_regularization_loss: ", radial_regularization_loss)
+        print("velocity_regularization_loss: ", velocity_regularization_loss)
+        print("fine_loss: ", fine_loss)
+        print("coarse_loss: ", coarse_loss)
+        loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss + 1e-4 * velocity_regularization_loss
+        
+        # Compute PSNR
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
 
@@ -153,6 +159,7 @@ class SuNeRFModule(LightningModule):
                                    'fine': fine_loss,
                                    'continuity': continuity_loss,
                                    'radial': radial_regularization_loss,
+                                   'velocity_reg': velocity_regularization_loss,
                                    'total': loss})
         self.log("Training PSNR", psnr)
 
@@ -161,7 +168,7 @@ class SuNeRFModule(LightningModule):
             self.scheduler.step()
         self.log('Learning Rate', self.scheduler.get_last_lr()[0])
 
-        return {'loss': loss, 'train_psnrs': psnr, 'continuity_loss': continuity_loss}
+        return {'loss': loss, 'train_psnr': psnr, 'continuity_loss': continuity_loss}
 
     def validation_step(self, batch, batch_nb):
         rays, time, target_img = batch
@@ -182,6 +189,8 @@ class SuNeRFModule(LightningModule):
                 'distance': distance}
 
     def validation_epoch_end(self, outputs):
+        if len(outputs) == 0:
+            return
         target_img = torch.cat([o['target_img'] for o in outputs])
         channel_map = torch.cat([o['channel_map'] for o in outputs])
         channel_map_coarse = torch.cat([o['channel_map_coarse'] for o in outputs])
@@ -224,7 +233,6 @@ class SuNeRFModule(LightningModule):
                                  'val_ssim': val_ssim},
                 'log': {'val/loss': val_loss, 'val/psnr': val_psnr, 'val/ssim': val_ssim}}
 
-
 def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
     output_path = '/'.join(save_path.split('/')[0:-1])
     os.makedirs(output_path, exist_ok=True)
@@ -235,7 +243,7 @@ def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path):
                 'test_kwargs': data_module.test_kwargs, 'config': config_data,
                 'start_time': unnormalize_datetime(min(data_module.times)),
                 'end_time': unnormalize_datetime(max(data_module.times))},
-               save_path)
+               save_path))
 
 
 if __name__ == '__main__':
