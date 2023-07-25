@@ -18,12 +18,76 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_tB/*.fits"
 
 
-# python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/**/*.fits" --output_path /mnt/ground-data/prep_HAO_all --check_matching
+# python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/**/*.fits" --output_path /mnt/prep_HAO_2view_background --check_matching
 # full training
-
-pythonn -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer**bang_0000_**/stepnum_005.fits" --output_path /mnt/ground-data/prep_HAO_all --check_matching
 
 python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints" --data_path_pB "/mnt/ground-data/prep_HAO/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_2viewpoint_v3" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 python -m sunerf.sunerf --wandb_name "hao_pinn_allviewpoints" --data_path_pB "/mnt/ground-data/prep_HAO_full/*pB*.fits" --data_path_tB "/mnt/ground-data/prep_HAO_full/*tB*.fits" --path_to_save "/mnt/ground-data/training/HAO_pinn_allviewpoint" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
+
+# Training with background
+
+
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/**/*.fits" --output_path /mnt/prep_HAO_2view_background --check_matching
+python -m sunerf.sunerf --wandb_name "hao_pinn_2viewpoints_background" --data_path_pB "/mnt/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_2viewpoints_backgrounds" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
+gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_tB /mnt/ground-data/
+gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_pB /mnt/ground-data/
+
+gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_280W_bang_0000_tB /mnt/ground-data/
+gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_280W_bang_0000_pB /mnt/ground-data/
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_020W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_020W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_020W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_020W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_040W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_040W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_040W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_040W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_060W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_060W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_060W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_060W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_080W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_080W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_080W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_080W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_100W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_100W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_100W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_100W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_120W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_120W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_120W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_120W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_140W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_140W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_140W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_140W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_160W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_160W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_160W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_160W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_180W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_180W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_180W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_180W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_200W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_200W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_200W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_200W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_220W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_220W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_220W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_220W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_240W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_240W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_240W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_240W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_260W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_260W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_260W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_260W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_280W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_280W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_280W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_280W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_300W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_300W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_300W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_300W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_320W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_320W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_320W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_320W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_340W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_340W_bang_0000_pB/stepnum_005.fits
+
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/dcmer_360W_bang_0000_tB/stepnum_005.fits
+gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/dcmer_360W_bang_0000_pB/stepnum_005.fits
 
