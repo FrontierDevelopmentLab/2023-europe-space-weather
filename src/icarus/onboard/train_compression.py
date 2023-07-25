@@ -49,7 +49,7 @@ class NCompressor(LightningModule):
         images, event_index, fts_file = batch
         x = images / 65535  # TODO: add this to dataloader
         x_hat = self.forward(x)["x_hat"]
-        loss = self.loss(x_hat, x)
+        loss = -self.loss(x_hat, x)
 
         if batch_idx % 10 == 0:
             self.log("train/loss", loss, prog_bar=True)
@@ -64,7 +64,7 @@ class NCompressor(LightningModule):
         images, event_index, fts_file = batch
         x = images / 65535  # TODO: add this to dataloader
         x_hat = self.model(x)["x_hat"]
-        loss = self.loss(x_hat, x)
+        loss = -self.loss(x_hat, x)
 
         self.metric.update(x_hat, x)
 
