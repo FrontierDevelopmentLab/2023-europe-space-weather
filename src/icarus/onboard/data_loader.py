@@ -132,6 +132,41 @@ class FitsDataModule(LightningDataModule):
             ]
         )
 
+    def _get_filelist(self):
+        """ """
+
+        # option 1: get list of all files from directories
+        # cor1_data = glob.glob("{}/*.fts".format(self.cor1_data_dir))  # inner corona
+        # cor2_data = glob.glob("{}/*.fts".format(self.cor2_data_dir))  # outer corona
+        # total_files = cor2_data if self.chosen_dataset == "cor2" else cor1_data
+
+        # option 2: get list of files based on filtering from meta files
+        # TODO hardcoded filenames
+        cor1_meta_file = "/mnt/onboard_data/data/lists/meta_cor1.csv"
+        cor2_meta_file = "/mnt/onboard_data/data/lists/meta_cor2.csv"
+        df1 = pd.read_csv(cor1_meta_file)
+        df2 = pd.read_csv(cor2_meta_file)
+
+        # filter by resolution, doorstat and normal type observations
+        # filtering by resolution is performed by looking at the x-coordinate of the centre pixel (not exactly half the resolution of the image)
+        # TODO move vars to config
+        res = 2048
+        cor1_data = df1[
+            (df1["DOORSTAT"] == 2)
+            & (df1["obs_type"] == "n")
+            & (df1["CRPIX1"] > res / 2 - 10)
+            & (df1["CRPIX1"] < res / 2 + 10)
+        ]["file_name"].values
+        cor2_data = df2[
+            (df2["DOORSTAT"] == 2)
+            & (df2["obs_type"] == "n")
+            & (df2["CRPIX1"] > res / 2 - 10)
+            & (df2["CRPIX1"] < res / 2 + 10)
+        ]["file_name"].values
+        total_files = np.concatenate([cor1_data, cor2_data])  # TODO want cor1 or cor2?
+
+        return total_files
+
     def setup(self, stage: str):
         """setup
             Method setting up the internals of the system
@@ -142,10 +177,9 @@ class FitsDataModule(LightningDataModule):
             stage (str): Stage for the data, encapsulating what this configuration is for - Example: Training, Testing, Validation
         """
         self.current_stage = stage
-        cor1_data = glob.glob("{}/*.fts".format(self.cor1_data_dir))  # inner corona
-        cor2_data = glob.glob("{}/*.fts".format(self.cor2_data_dir))  # outer corona
+        # cor1_data = glob.glob("{}/*.fts".format(self.cor1_data_dir))  # inner corona
+        # cor2_data = glob.glob("{}/*.fts".format(self.cor2_data_dir))  # outer corona
 
-        n_total_files = len(cor1_data + cor2_data)
         # Should we set proportions?
         p_train = self.p_train
         p_test = self.p_test
@@ -156,32 +190,31 @@ class FitsDataModule(LightningDataModule):
             p_train = p_train / p_total  # enforce percentage
             p_test = p_test / p_total
             p_val = p_val / p_total
+        # total_files = cor2_data if self.chosen_dataset == "cor2" else cor1_data
 
-        # self.n_train = int(n_total_files * p_train)
-        # self.n_test = int(n_total_files * p_test)
-        # self.n_val = int(n_total_files * p_val)
-        # sum_set_files = self.n_train+self.n_test + self.n_val
-        # assert n_total_files == sum_set_files, "Sum of input lengths does not equal the length of the input set - {}+{}+{} = {} != {}".format(self.n_train,self.n_test,self.n_val,sum_set_files,n_total_files)
-
-        # There is a bit of time correlation here
-        # - frankly, not important as long as timestamps are used to handle files, ie
-        # can correlate timesteps to files, allowing us to reconstruct the correct physics
-        total_files = cor2_data if self.chosen_dataset == "cor2" else cor1_data
-
-        # print(total_files)
+        total_files = self._get_filelist()
+        print("LEN FILES", total_files.shape)
 
         # Check if image list exists
+        # If not: create based on total_files list
         if not os.path.exists("filenames_and_events.csv"):
             all_fits_data = [
                 self._load_fits_fileinfo_and_events(fname) for fname in total_files
             ]
             df = pd.DataFrame(all_fits_data)
             df.to_csv("filenames_and_events.csv")
+        # If yes: extract only filenames and labels based on total_files list
         else:
             all_fits_data = pd.read_csv(
                 "filenames_and_events.csv", header=0, index_col=0
             )
-            all_fits_data = [(file, event) for file, event in all_fits_data.to_numpy()]
+            all_fits_data = [
+                (file, event)
+                for file, event in all_fits_data.to_numpy()
+                if file in total_files
+            ]
+        print(len(all_fits_data))
+        print("UNIQUE", np.unique(np.array(all_fits_data)[:, 1], return_counts=True))
 
         fits_train, fits_val, fits_test = random_split(
             all_fits_data, [p_train, p_val, p_test]
