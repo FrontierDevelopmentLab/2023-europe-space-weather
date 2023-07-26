@@ -142,11 +142,10 @@ class SuNeRFModule(LightningModule):
         velocity_regularization_target = 75 # Solar Radii per 2 days
         velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target).abs()).mean() / 300
 
-        print("continuity_loss: ", continuity_loss)
-        print("radial_regularization_loss: ", radial_regularization_loss)
-        print("velocity_regularization_loss: ", velocity_regularization_loss)
-        print("fine_loss: ", fine_loss)
-        print("coarse_loss: ", coarse_loss)
+        
+        formatted_loss_logstring = "="*25 + "\n Regularization and continuity" "\n \t Continuity Loss: {}".format(continuity_loss)+"\n \t Radial Regularization Loss: {}".format(radial_regularization_loss) +"\n \t Velocity Regularization Loss: {}".format(radial_regularization_loss)+"\n Model Losses" + "\n Fine Model Loss: {}".format(fine_loss) + "\n Coarse Model Loss: {} \n".format(coarse_loss) + "="*25
+        print(formatted_loss_logstring)
+        
         loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss + 1e-4 * velocity_regularization_loss
         
         # Compute PSNR
