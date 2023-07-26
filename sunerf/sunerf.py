@@ -27,7 +27,9 @@ class SuNeRFModule(LightningModule):
 
         for key in hparams.keys():
             self.hparams[key] = hparams[key]
-        self.lambda_regularization = self.hparams['Lambda']['regularization']
+        self.lambda_continuity = self.hparams['Lambda']['continuity']
+        self.lambda_radial_regularization = self.hparams['Lambda']['radial_regularization']
+        self.lambda_velocity_regularization = self.hparams['Lambda']['velocity_regularization']
 
         self.start_iter = 0  # TODO: Update this based on loading the checkpoint
         self.n_samples_hierarchical = self.hparams['Hierarchical sampling']['n_samples_hierarchical']
@@ -131,7 +133,8 @@ class SuNeRFModule(LightningModule):
         dVz_dt = jac_matrix[:, 3, 3]
         
         continuity_loss = dNe_dt + electron_density * (dVx_dx + dVy_dy + dVz_dz) + (torch.stack([dNe_dx, dNe_dy, dNe_dz], -1) * velocity).sum(-1)
-        continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
+        continuity_loss = (torch.abs(continuity_loss)).mean()
+        # continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
 
         # regularize vectors to point radially outwards
         # radial_regularization_loss = (velocity * query_points[..., :3]).sum(-1) / (torch.norm(velocity, dim=-1) * torch.norm(query_points[..., :3], dim=-1) + 1e-8)
@@ -146,7 +149,7 @@ class SuNeRFModule(LightningModule):
         formatted_loss_logstring = "="*25 + "\n Regularization and continuity" "\n \t Continuity Loss: {}".format(continuity_loss)+"\n \t Radial Regularization Loss: {}".format(radial_regularization_loss) +"\n \t Velocity Regularization Loss: {}".format(radial_regularization_loss)+"\n Model Losses" + "\n Fine Model Loss: {}".format(fine_loss) + "\n Coarse Model Loss: {} \n".format(coarse_loss) + "="*25
         print(formatted_loss_logstring)
         
-        loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss + 1e-4 * velocity_regularization_loss
+        loss = fine_loss + coarse_loss + self.lambda_continuity * continuity_loss + self.lambda_radial_regularization * radial_regularization_loss + self.lambda_velocity_regularization * velocity_regularization_loss
         
         # Compute PSNR
         with torch.no_grad():

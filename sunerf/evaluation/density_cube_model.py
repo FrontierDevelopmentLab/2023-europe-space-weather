@@ -11,8 +11,8 @@ from tqdm import tqdm
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
-# base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
-base_path = '/mnt/ground-data/training/HAO_pinn_allviewpoint/'
+base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
+# base_path = '/mnt/ground-data/training/HAO_pinn_allviewpoint/'
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_density_cube')
 
