@@ -193,9 +193,9 @@ def _load_map_data(map_path):
 
     time = normalize_datetime(s_map.date.datetime)
 
-    print('COORDS', s_map.heliographic_longitude, s_map.heliographic_latitude)
-    pose = pose_spherical(-s_map.heliographic_longitude.to(u.deg).value,
-                          s_map.heliographic_latitude.to(u.deg).value,
+    print('COORDS', s_map.carrington_longitude, s_map.carrington_latitude)
+    pose = pose_spherical(-s_map.carrington_longitude.to(u.deg).value,
+                          s_map.carrington_latitude.to(u.deg).value,
                           s_map.dsun.to(u.solRad).value).float().numpy()
 
     image = s_map.data.astype(np.float32)
