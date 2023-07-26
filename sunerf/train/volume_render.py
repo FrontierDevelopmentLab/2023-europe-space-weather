@@ -133,6 +133,13 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	height_from_sun = (electron_density * s_q).sum(1) / (electron_density.sum(1) + 1e-10)
 	height_from_obs = (electron_density * z).sum(1) / (electron_density.sum(1) + 1e-10)
 	
+	# clip pixel_tB and pixel_pB to over [e^v_min, e^v_max]
+	# device = 'cuda' if torch.cuda.is_available() else "cpu"
+	# pixel_tB = torch.clip(pixel_tB, torch.exp(torch.tensor(v_min).to(device)), torch.exp(torch.tensor(v_max).to(device)))
+	# pixel_pB = torch.clip(pixel_pB, torch.exp(torch.tensor(v_min).to(device)), torch.exp(torch.tensor(v_max).to(device)))
+	pixel_tB = torch.clamp(pixel_tB, min=np.exp(v_min), max=np.exp(v_max))
+	pixel_pB = torch.clamp(pixel_pB, min=np.exp(v_min), max=np.exp(v_max))
+
 	# target images are already logged
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
