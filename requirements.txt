@@ -1,4 +1,0 @@
-sunpy[all]
-wandb
-pytorch-lightning==1.9.3
-git+https://github.com/RobertJaro/InstrumentToInstrument.git

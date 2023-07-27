@@ -1,1 +1,0 @@
-python -m sunerf.evaluation.video_cme

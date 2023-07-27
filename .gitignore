@@ -187,12 +187,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-
-# custom
-wandb/
-*.jpg
-*.png
-*.mp4
-
 # Pyenv
 .python-version
