@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="8.000" timestamp="2023-07-24T12:32:29.839877" hostname="og-eda"><testcase classname="" name="test.data.test_data_loader" time="0.000"><error message="collection failure">../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/runner.py:341: in from_call
+    result: Optional[TResult] = func()
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/runner.py:372: in &lt;lambda&gt;
+    call = CallInfo.from_call(lambda: list(collector.collect()), "collect")
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/python.py:531: in collect
+    self._inject_setup_module_fixture()
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/python.py:545: in _inject_setup_module_fixture
+    self.obj, ("setUpModule", "setup_module")
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/python.py:310: in obj
+    self._obj = obj = self._getobj()
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/python.py:528: in _getobj
+    return self._importtestmodule()
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/python.py:617: in _importtestmodule
+    mod = import_path(self.path, mode=importmode, root=self.config.rootpath)
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/pathlib.py:565: in import_path
+    importlib.import_module(module_name)
+../.pyenv/versions/3.10.12/lib/python3.10/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+&lt;frozen importlib._bootstrap&gt;:1050: in _gcd_import
+    ???
+&lt;frozen importlib._bootstrap&gt;:1027: in _find_and_load
+    ???
+&lt;frozen importlib._bootstrap&gt;:1006: in _find_and_load_unlocked
+    ???
+&lt;frozen importlib._bootstrap&gt;:688: in _load_unlocked
+    ???
+../.pyenv/versions/ground/lib/python3.10/site-packages/_pytest/assertion/rewrite.py:178: in exec_module
+    exec(co, module.__dict__)
+test/data/test_data_loader.py:6: in &lt;module&gt;
+    data =NeRFDataModule(config_data)
+E   NameError: name 'config_data' is not defined</error></testcase></testsuite></testsuites>
