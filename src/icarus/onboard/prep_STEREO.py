@@ -75,30 +75,8 @@ def generate_image(m, ref_map, img_fname, vmin=0, vmax=20):
     # imshow is mirror to m.plot
     plt.imshow(data, origin="lower", cmap="stereocor2", vmin=vmin, vmax=vmax)
 
-    plt.savefig(img_data, dpi=100)
+    plt.savefig(img_fname, dpi=100)
     plt.close()
-
-
-def generate_video(video_path, video_name, framerate=10):
-    """
-    given directory of images, generate video
-    given frames per second
-
-    warning: if no write permissions it still pretends to work
-    """
-    images = sorted(glob(os.path.join(video_path, "*.jpg")))
-    print(images)
-    frame = cv2.imread(images[0])
-    height, width, layers = frame.shape
-
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video = cv2.VideoWriter(video_name, fourcc, framerate, (width, height))
-
-    for image in images:
-        video.write(cv2.imread(image))
-
-    cv2.destroyAllWindows()
-    video.release()
 
 
 def generate_images(fnames, target_path, req_polars=[0, 120, 240], prefix="cor2sa"):
@@ -133,7 +111,29 @@ def generate_images(fnames, target_path, req_polars=[0, 120, 240], prefix="cor2s
                 generate_image(m, ref_map, img_fname, vmin=0, vmax=20)
 
 
+def generate_video(video_path, video_name, framerate=10):
+    """
+    given directory of images, generate video
+    given frames per second
+
+    warning: if no write permissions it still pretends to work
+    """
+    images = sorted(glob(os.path.join(video_path, "*.jpg")))
+    frame = cv2.imread(images[0])
+    height, width, layers = frame.shape
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video = cv2.VideoWriter(video_name, fourcc, framerate, (width, height))
+
+    for image in images:
+        video.write(cv2.imread(image))
+
+    cv2.destroyAllWindows()
+    video.release()
+
+
 if __name__ == "__main__":
+    # TODO add as argparse
     eventdate = "20140222"
     instrument = "cor2"  #'cor1'
     satellite = "a"  # "b"
@@ -146,12 +146,14 @@ if __name__ == "__main__":
 
     # set of files for given date, cor2, "normal", STEREO A (72 images)
     fnames_a = sorted(
-        glob("/mnt/onboard_data/data/{}/{}_*_n*{}.fts").format(
-            instrument, eventdate, satellite
+        glob(
+            "/mnt/onboard_data/data/{}/{}_*_n*{}.fts".format(
+                instrument, eventdate, satellite
+            )
         )
     )
 
-    fgenerate_images(
+    generate_images(
         fnames_a,
         base_path,
         req_polars=angles,
@@ -160,4 +162,4 @@ if __name__ == "__main__":
     for angle in angles:
         video_path = base_path + str(angle)
         video_name = os.path.join(video_path, "video_" + str(angle) + ".mp4")
-        fgenerate_video(video_path, video_name, framerate=5)
+        generate_video(video_path, video_name, framerate=5)
