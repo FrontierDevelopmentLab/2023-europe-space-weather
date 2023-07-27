@@ -19,7 +19,7 @@ Stratified sampling:
   # and the box sampling with more points close to the solar surface (True)
 
 Scaling:
-  vmin : -18
+  vmin : -20
   vmax : -10
 
 Model:

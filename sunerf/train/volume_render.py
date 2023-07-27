@@ -137,12 +137,16 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# device = 'cuda' if torch.cuda.is_available() else "cpu"
 	# pixel_tB = torch.clip(pixel_tB, torch.exp(torch.tensor(v_min).to(device)), torch.exp(torch.tensor(v_max).to(device)))
 	# pixel_pB = torch.clip(pixel_pB, torch.exp(torch.tensor(v_min).to(device)), torch.exp(torch.tensor(v_max).to(device)))
-	pixel_tB = torch.clamp(pixel_tB, min=np.exp(v_min), max=np.exp(v_max))
-	pixel_pB = torch.clamp(pixel_pB, min=np.exp(v_min), max=np.exp(v_max))
+	# if np.any(pixel_tB.cpu().detach().numpy() < np.exp(v_min)):
+	# 	print("Pixel tB smaller than expected: {} < {}".format(pixel_tB.cpu().detach().numpy(), np.exp(v_min)))
+	# if np.any(pixel_pB.cpu().detach().numpy() < np.exp(v_min)):
+	# 	print("Pixel pB smaller than expected: {} < {}".format(pixel_pB.cpu().detach().numpy(), np.exp(v_min)))
+	# pixel_tB = torch.clamp(pixel_tB, min=np.exp(v_min), max=np.exp(v_max))
+	# pixel_pB = torch.clamp(pixel_pB, min=np.exp(v_min), max=np.exp(v_max))
 
 	# target images are already logged
-	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
-	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
+	pixel_tB = (torch.log(pixel_tB + 3e-9) - v_min) / (v_max - v_min) # normalization
+	pixel_pB = (torch.log(pixel_pB + 3e-9) - v_min) / (v_max - v_min) # normalization
 	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)

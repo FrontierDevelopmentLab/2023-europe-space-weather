@@ -47,7 +47,7 @@ class NeRFDataModule(LightningDataModule):
         num_workers = hparams['Training']['num_workers']
         self.num_workers = num_workers if num_workers is not None else os.cpu_count() // 2
 
-        # use an image of the first instrument (SDO)
+        # use an image of the first instrument (SDO)x
         test_idx = len(images) // 6
 
         print("BEFORE FLATTEN", np.array(rays).shape, np.array(times).shape, np.array(images).shape)
