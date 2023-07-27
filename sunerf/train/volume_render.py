@@ -145,8 +145,8 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# pixel_pB = torch.clamp(pixel_pB, min=np.exp(v_min), max=np.exp(v_max))
 
 	# target images are already logged
-	pixel_tB = (torch.log(pixel_tB + 3e-9) - v_min) / (v_max - v_min) # normalization
-	pixel_pB = (torch.log(pixel_pB + 3e-9) - v_min) / (v_max - v_min) # normalization
+	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
+	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
 	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
 
 	# set the weigths to the intensity contributions (sample primary contributing regions)
