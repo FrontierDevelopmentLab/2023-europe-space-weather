@@ -59,7 +59,7 @@ With the env installed, you can install the module:
 ```bash
 pip install -e .[onboard,ttest]
 
-# or 
+# or
 
 pip install -e .[ground,test]
 ```
