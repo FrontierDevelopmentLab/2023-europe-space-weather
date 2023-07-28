@@ -50,6 +50,9 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# * I0 (intensity/ of the Sun - will vary with solar cycle - look up table?)
 	# * sigma_e (scattering constant - eqn 3)
 
+	# print("density min max:", torch.min(raw[:, :, 0]), torch.max(raw[:, :, 0]))
+	# print("velocity min max:", torch.min(raw[:, :, 1:]), torch.max(raw[:, :, 1:]))
+
 	electron_density = 10 ** (raw[:, :, 0] + 15)
 	velocity = raw[:, :, 1:]
 
