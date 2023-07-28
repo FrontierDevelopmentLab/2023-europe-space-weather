@@ -189,3 +189,10 @@ Temporary Items
 
 # Pyenv
 .python-version
+
+# custom
+wandb/
+*.jpg
+*.png
+*.mp4
+*temp*
