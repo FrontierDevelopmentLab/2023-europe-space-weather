@@ -29,19 +29,21 @@ class ResModel(nn.Module):
         self.posenc = PositionalEncoding(8, 20)
         self.d_in = nn.Linear(in_coords * 20 * 2, dim)
 
-        meta_blocks = [ResBlock(dim, self.activation) for _ in range(n_blocks)]
-        self.meta_blocks = nn.Sequential(*meta_blocks)
+        meta_blocks = [nn.Linear(dim, dim) for _ in range(n_blocks)]
+        self.meta_blocks = nn.ModuleList(meta_blocks)
 
-        head_blocks = [ResBlock(dim, self.activation) for _ in range(n_blocks // 2)]
-        self.head_blocks = nn.Sequential(*head_blocks)
+        head_blocks = [nn.Linear(dim, dim) for _ in range(n_blocks // 2)]
+        self.head_blocks = nn.ModuleList(head_blocks)
 
         self.d_out = nn.Linear(dim, out_values)
 
     def forward(self, x):
         x = self.posenc(x)
         x = self.activation(self.d_in(x))
-        x = self.meta_blocks(x)
-        x = self.head_blocks(x)
+        for b in self.meta_blocks:
+            x = self.activation(b(x))
+        for b in self.head_blocks:
+            x = self.activation(b(x))
         x = self.d_out(x)
         return x
 
