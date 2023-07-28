@@ -104,8 +104,8 @@ class SuNeRFModule(LightningModule):
 
         query_points_enc = self.encode(query_points)
         raw = self.fine_model(query_points_enc)
-        electron_density = 10 ** (15 + raw[..., 0])
-        velocity = torch.tanh(raw[..., 1:]) / 3 * 250 + 50 # normalize vector-norm to 50 - 300 solar radii/ 2 days
+        electron_density = raw[..., 0]
+        velocity = raw[..., 1:]
 
         output_vector = torch.cat([electron_density[..., None], velocity], -1)
         jac_matrix = jacobian(output_vector, query_points)

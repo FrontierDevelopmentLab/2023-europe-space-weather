@@ -50,11 +50,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# * I0 (intensity/ of the Sun - will vary with solar cycle - look up table?)
 	# * sigma_e (scattering constant - eqn 3)
 
-	# print("density min max:", torch.min(raw[:, :, 0]), torch.max(raw[:, :, 0]))
-	# print("velocity min max:", torch.min(raw[:, :, 1:]), torch.max(raw[:, :, 1:]))
-
-	electron_density = 10 ** (raw[:, :, 0] + 15)
-	velocity = raw[:, :, 1:]
+	electron_density = raw[:, :, 0]
 
     # HOWARD AND TAPPIN 2009 FIG 3
 	# working with units of solar radii
@@ -88,8 +84,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	C = (4 / 3) - torch.cos(omega) - torch.cos(omega) ** 3 / 3
 	D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
 
- 	# - (1/8) * (1 - 3 * sin(omega) ** 2 - cos(omega) ** 2 / (sin(omega) + 1e-6) * (1 + 3 * sin(omega) ** 2) *  ln((1 + sin(omega)) / (cos(omega) + 1e-6)))
-
     # equations 23, 24, 29
 	intensity_T = I0 * torch.pi * sigma_e  / (2 * z ** 2) * ((1 - u) * C + u * D)
 	intensity_pB = I0 * torch.pi * sigma_e / (2 * z ** 2) * torch.sin(chi) ** 2 * ((1 - u) * A + u * B)
@@ -114,8 +108,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	# compute total absorption for each light ray (intensity)
 	# how much light is transmitted from each sampled point
 	# total_absorption = cumprod_exclusive(absorption + 1e-10) # first intensity has no absorption (1, t[0], t[0] * t[1], t[0] * t[1] * t[2], ...)
-
-
 	
 	# [(1), 1, .9, .9, 0, 0] --> total absorption for each point along the ray
 	# apply absorption to intensities
