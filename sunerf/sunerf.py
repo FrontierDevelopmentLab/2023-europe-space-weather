@@ -134,7 +134,6 @@ class SuNeRFModule(LightningModule):
         continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
 
         # regularize vectors to point radially outwards
-        # radial_regularization_loss = (velocity * query_points[..., :3]).sum(-1) / (torch.norm(velocity, dim=-1) * torch.norm(query_points[..., :3], dim=-1) + 1e-8)
         radial_regularization_loss = velocity / (torch.norm(velocity, dim=-1, keepdim=True) + 1e-8) - query_points[..., :3] / (torch.norm(query_points[..., :3], dim=-1, keepdim=True) + 1e-8)
         radial_regularization_loss = (torch.norm(radial_regularization_loss, dim=-1) ** 2).mean()
 
