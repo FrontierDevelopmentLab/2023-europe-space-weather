@@ -7,6 +7,8 @@ Training:
   log_every_n_steps: 1000                                 # log images and save states between epochs
 
 Lambda:
-  regularization: 1
+  continuity: 1.e-4
+  radial_regularization: 1.e-4
+  velocity_regularization: 0
 
 Debug: False

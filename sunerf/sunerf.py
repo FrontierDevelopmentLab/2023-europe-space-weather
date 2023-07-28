@@ -27,7 +27,9 @@ class SuNeRFModule(LightningModule):
 
         for key in hparams.keys():
             self.hparams[key] = hparams[key]
-        self.lambda_regularization = self.hparams['Lambda']['regularization']
+        self.lambda_continuity = self.hparams['Lambda']['continuity']
+        self.lambda_radial_regularization = self.hparams['Lambda']['radial_regularization']
+        self.lambda_velocity_regularization = self.hparams['Lambda']['velocity_regularization']
 
         self.start_iter = 0  # TODO: Update this based on loading the checkpoint
         self.n_samples_hierarchical = self.hparams['Hierarchical sampling']['n_samples_hierarchical']
@@ -137,8 +139,16 @@ class SuNeRFModule(LightningModule):
         radial_regularization_loss = velocity / (torch.norm(velocity, dim=-1, keepdim=True) + 1e-8) - query_points[..., :3] / (torch.norm(query_points[..., :3], dim=-1, keepdim=True) + 1e-8)
         radial_regularization_loss = (torch.norm(radial_regularization_loss, dim=-1) ** 2).mean()
 
-        loss = fine_loss + coarse_loss + 1e-4 * continuity_loss + 1e-4 * radial_regularization_loss
-        #
+        # regularize velocity
+        velocity_regularization_target = 75 # Solar Radii per 2 days
+        velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target).abs()).mean() / 300
+
+
+        loss = fine_loss + coarse_loss + self.lambda_continuity * continuity_loss + self.lambda_radial_regularization * radial_regularization_loss + self.lambda_velocity_regularization * velocity_regularization_loss
+        
+        formatted_loss_logstring = "="*25 + "\n Regularization and continuity" "\n \t Continuity Loss: {}".format(continuity_loss)+"\n \t Radial Regularization Loss: {}".format(radial_regularization_loss) +"\n \t Velocity Regularization Loss: {}".format(radial_regularization_loss)+"\n Model Losses" + "\n \t Fine Model Loss: {}".format(fine_loss) + "\n \t Coarse Model Loss: {} \n \n \t Complete Loss: {} \n".format(coarse_loss, loss) + "="*25
+        print(formatted_loss_logstring)
+
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
 
@@ -148,6 +158,7 @@ class SuNeRFModule(LightningModule):
                                    'fine': fine_loss,
                                    'continuity': continuity_loss,
                                    'radial': radial_regularization_loss,
+                                   'velocity_reg': velocity_regularization_loss,
                                    'total': loss})
         self.log("Training PSNR", psnr)
 
@@ -156,7 +167,7 @@ class SuNeRFModule(LightningModule):
             self.scheduler.step()
         self.log('Learning Rate', self.scheduler.get_last_lr()[0])
 
-        return {'loss': loss, 'train_psnrs': psnr, 'continuity_loss': continuity_loss}
+        return {'loss': loss, 'train_psnr': psnr, 'continuity_loss': continuity_loss}
 
     def validation_step(self, batch, batch_nb):
         rays, time, target_img = batch
