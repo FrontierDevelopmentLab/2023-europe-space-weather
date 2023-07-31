@@ -1,12 +1,6 @@
 # Training from scratch
 # init workspace
 
-# PSI
-# convert data
-python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/pb_raw/*.fits"  --output_path "/mnt/prep-data/prep_PSI/pb_raw"
-python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/b_raw/*.fits"  --output_path "/mnt/prep-data/prep_PSI/b_raw"
-# full training PSI
-python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/ground-data/prep_PSI/pb_raw/*.fits" --data_path_tB "/mnt/ground-data/prep_PSI/b_raw/*.fits" --path_to_save "/mnt/training/PSI_v1" --train "config/train.yaml" --hyperparameters "config/hyperparams_icarus.yaml"
 
 # HAO
 # convert data
@@ -102,7 +96,8 @@ gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_
 gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_bang_0000_tB/stepnum_005.fits /mnt/ground-data/data_fits/dcmer_360W_bang_0000_tB/stepnum_005.fits
 gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_bang_0000_pB/stepnum_005.fits /mnt/ground-data/data_fits/dcmer_360W_bang_0000_pB/stepnum_005.fits
 
-
+# Download for all of the PSI Data
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/PSI /mnt/ground-data/PSI/
 ################
 #              #
 #  Prep Data   #
@@ -119,6 +114,12 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 # prep_HAO_allview
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/**/*.fits" --output_path /mnt/prep-data/prep_HAO_allview --check_matching
 
+# PSI
+# convert data
+python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/pb_raw/*.fits"  --output_path "/mnt/prep-data/prep_PSI/pb_raw"
+python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/b_raw/*.fits"  --output_path "/mnt/prep-data/prep_PSI/b_raw"
+
+
 ######################
 #                    #
 #   Running ICARUS   #
@@ -131,3 +132,6 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_2view" --data_path_pB "/mnt/prep-
 python -m sunerf.sunerf --wandb_name "hao_pinn_2view_background" --data_path_pB "/mnt/prep-data/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_2view_background" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 # prep_HAO_allview
 python -m sunerf.sunerf --wandb_name "hao_pinn_all" --data_path_pB "/mnt/prep-data/prep_HAO_allview/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_allview/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_allview" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
+# full training PSI
+python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/prep-data/prep_PSI/pb_raw/*.fits" --data_path_tB "/mnt/prep-data/prep_PSI/b_raw/*.fits" --path_to_save "/mnt/training/PSI_v1" --train "config/train.yaml" --hyperparameters "config/hyperparams_icarus.yaml"
