@@ -118,10 +118,12 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	emerging_tB = intensity_tB * electron_density * dists
 	emerging_pB = intensity_pB * electron_density * dists
 
+	
+
 	# sum all intensity contributions along LOS
 	pixel_tB = emerging_tB.sum(1)[:, None] 
 	pixel_pB = emerging_pB.sum(1)[:, None] 
-	
+	print("pixel tB smaller than 0? - {}".format((pixel_tB < 0).any()))
 	# height and density maps
 	# electron_density: (batch, sampling_points, 1), s_q: (batch, sampling_points, 1)
 	pixel_density = (electron_density * dists).sum(1)
@@ -132,7 +134,6 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	pixel_tB = (torch.log(pixel_tB) - v_min) / (v_max - v_min) # normalization
 	pixel_pB = (torch.log(pixel_pB) - v_min) / (v_max - v_min) # normalization
 	pixel_B = torch.cat([pixel_tB, pixel_pB], dim=-1)
-
 	# set the weigths to the intensity contributions (sample primary contributing regions)
     # need weights for sampling for fine model
 	weights = electron_density / (electron_density.sum(1)[:, None] + 1e-10)
