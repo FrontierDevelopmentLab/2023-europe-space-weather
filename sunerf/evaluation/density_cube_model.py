@@ -12,8 +12,11 @@ from sunerf.utilities.data_loader import normalize_datetime
 # base_path = '/mnt/training/HAO_pinn_cr_allview_a26978f_heliographic'
 # observer_offset = np.deg2rad(90)
 
-base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
-observer_offset = np.deg2rad(180)
+base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+observer_offset = np.deg2rad(90)
+
+# base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
+# observer_offset = np.deg2rad(180)
 
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_density_cube')
@@ -58,7 +61,7 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
     # velocity = velocity / 10
 
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-    im = ax.pcolormesh(phph - observer_offset, rr, density, edgecolors='face', cmap='viridis', norm='log', vmin=2e24, vmax=8e26)
+    im = ax.pcolormesh(phph - observer_offset, rr, density, edgecolors='face', cmap='viridis', norm='log', vmin=4e24, vmax=8e26)
 
     plt.colorbar(im, label='$N_e$')
     plt.axis('on')
