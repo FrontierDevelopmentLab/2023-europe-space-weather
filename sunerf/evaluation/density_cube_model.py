@@ -12,8 +12,11 @@ from sunerf.utilities.data_loader import normalize_datetime
 # base_path = '/mnt/training/HAO_pinn_cr_allview_a26978f_heliographic'
 # observer_offset = np.deg2rad(90)
 
-base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+base_path = '/mnt/training/HAO_pinn_1view'
 observer_offset = np.deg2rad(90)
+
+# base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+# observer_offset = np.deg2rad(90)
 
 # base_path = '/mnt/training/HAO_pinn_2viewpoints_backgrounds'
 # observer_offset = np.deg2rad(180)
