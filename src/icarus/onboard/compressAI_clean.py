@@ -113,6 +113,12 @@ if __name__ == "__main__":
             for batch in fits_loader:
                 plt.close("all")
                 images, event_index, fts_file = batch
+                x = images.to(device) / 65535
+                # Compression and Decompression
+                with torch.no_grad():
+                    out_batch = net.forward(x)
+                # out_net["x_hat"] += out_net["x_hat"].min()  # .clamp_(0, 1)
+
                 for i in range(images.size(0)):
                     image_np = np.log1p(
                         images[i].numpy().transpose(1, 2, 0)
@@ -128,19 +134,23 @@ if __name__ == "__main__":
                     dir_ = CME_DIR if is_cme else OTHER_DIR
                     plotname = os.path.join(dir_, initial_name)
 
-                    image_pil.save(plotname)
+                    # image_pil.save(plotname) # TODO remove for now
 
-                    x = images[i].to(device).unsqueeze(0) / 65535
+                    # x = images[i].to(device).unsqueeze(0) / 65535
                     # x = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x)
                     # Compression and Decompression
-                    with torch.no_grad():
-                        out_net = net.forward(x)
-                    out_net["x_hat"] += out_net["x_hat"].min()  # .clamp_(0, 1)
+                    # with torch.no_grad():
+                    #    out_net = net.forward(x)
+                    # print(out_batch[i].keys())
+                    out_batch["x_hat"][i] += out_batch["x_hat"][
+                        i
+                    ].min()  # .clamp_(0, 1)
+
                     # print(out_net.keys())
                     # print(out_net["x_hat"].shape)
 
                     rec_net = (
-                        out_net["x_hat"]
+                        out_batch["x_hat"][i]
                         .squeeze()
                         .cpu()
                         .detach()
@@ -153,11 +163,11 @@ if __name__ == "__main__":
                     plt.axis("off")
                     plt.imshow(scale_minmax(rec_net))
                     plt.show()
-                    plt.savefig(plotname)
+                    # plt.savefig(plotname) # TODO remove for now
 
                     # comparison
                     diff = (
-                        torch.mean((out_net["x_hat"] - x).abs(), axis=1)
+                        torch.mean((out_batch["x_hat"][i] - x[i]).abs(), axis=0)
                         .squeeze()
                         .cpu()
                         .detach()
@@ -190,13 +200,17 @@ if __name__ == "__main__":
                     jp2_x = (
                         torch.from_numpy(jp2[:]).to(device).unsqueeze(0) / 65535
                     )  # Similar setup to x
+                    # print(jp2_x.shape)
+                    # print(x.shape)
+                    print("LINE205", jp2_x.shape, x.shape)
                     j2k_recon_diff = (
-                        torch.mean((jp2_x - x).abs(), axis=1)
+                        torch.mean((jp2_x - x[i]).abs(), axis=0)
                         .squeeze()
                         .cpu()
                         .detach()
                         .numpy()
                     )
+                    print("LINE212", j2k_recon_diff.shape)
 
                     # Assume that the data is saved next to the header, so filesize is approximately the size of the file in bytes + size of image in bytes. Therefore, n_bits = 8*(filesize - headersize)
                     n_bits_estimate = 8 * (os.stat(full_file_name).st_size)
@@ -211,15 +225,19 @@ if __name__ == "__main__":
                     )  # Should be OK, just dark as the range is large
                     axes[1].title.set_text(
                         "Reconstructed with VQVAE \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
-                            compute_psnr(x, out_net["x_hat"]),
-                            compute_msssim(x, out_net["x_hat"]),
-                            compute_bpp(out_net),
+                            compute_psnr(x[i].unsqueeze(0), out_batch["x_hat"][i]),
+                            compute_msssim(
+                                x[i].unsqueeze(0), out_batch["x_hat"][i].unsqueeze(0)
+                            ),
+                            compute_bpp(out_batch),
                         )
                     )
                     # fix.colorbar(im, ax=axes[1])
                     # Compute MSE
                     mse = (
-                        torch.mean((out_net["x_hat"] - x) ** 2, axis=1)
+                        torch.mean(
+                            (out_batch["x_hat"][i] - x[i].unsqueeze(0)) ** 2, axis=1
+                        )
                         .squeeze()
                         .cpu()
                         .detach()
@@ -232,11 +250,18 @@ if __name__ == "__main__":
                     # plot comparison of original, reconstructed and diff
 
                     im = axes[3].imshow(jp2[:])  # Reconstructed in JP2 format
-                    x_red = x[:, 0, :, :].unsqueeze(0)
+                    x_red = x[i, 0, :, :].unsqueeze(0).unsqueeze(0)
                     jp2_x_inc = jp2_x.unsqueeze(0)
+                    print(
+                        "LINE253",
+                        x_red.shape,
+                        x[i].unsqueeze(0).shape,
+                        jp2_x_inc.shape,
+                        jp2_x.shape,
+                    )
                     axes[3].title.set_text(
                         "Reconstructed From J2K \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
-                            compute_psnr(x, jp2_x),
+                            compute_psnr(x[i].unsqueeze(0), jp2_x),
                             compute_msssim(x_red, jp2_x_inc),
                             original_bits_per_pixel,
                         )
@@ -244,16 +269,19 @@ if __name__ == "__main__":
                     # fix.colorbar(im, ax=axes[1])
                     # Compute MSE For J2K
                     mse_j2k = (
-                        torch.mean((jp2_x - x[:, 0, :, :]) ** 2, axis=1)
+                        torch.mean((jp2_x - x[i, 0, :, :]) ** 2, axis=1)
                         .squeeze()
                         .cpu()
                         .detach()
                         .numpy()
                         .mean()
                     )
+                    print("LINE271", j2k_recon_diff.shape)
                     im = axes[4].imshow(j2k_recon_diff, cmap="viridis")
                     axes[4].title.set_text(
-                        "Difference J2K - MSE: {:.6f}".format(mse_j2k)
+                        "Difference J2K - MSE: {:.6f}".format(
+                            mse_j2k
+                        )  # TODO differencing not working correctly
                     )
                     # fix.colorbar(im, ax=axes[2])
                     # plot comparison of original, reconstructed and diff

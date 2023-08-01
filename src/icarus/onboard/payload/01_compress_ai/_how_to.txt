@@ -1,0 +1,34 @@
+# 1 prep environment
+
+conda create -c conda-forge -n fdl23_compressai python=3.10 mamba
+conda activate fdl23_compressai
+
+pip install sunpy zeep drms hvpy openvino-dev==2023.0.1 pytorch_msssim compressai onnx onnxruntime
+
+
+# 2 prep data
+
+(just one file for now)
+
+# 3 run codes
+
+## full example at:
+python compress_ai_run.py
+
+## save the model
+python openvino_save_model.py
+
+mo --input_model ./onboard_net.onnx
+mo --input_model ./onboard_compressor_y.onnx
+
+
+## use the model
+
+python openvino_use_model.py
+
+
+## finally, copy these into the payload
+
+cp onboard_net* ../02_run_inside_docker/payload/
+cp onboard_compressor_y* ../02_run_inside_docker/payload/
+cp saved_entropy_bottleneck.pt ../02_run_inside_docker/payload/

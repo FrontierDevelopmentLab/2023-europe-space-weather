@@ -1,0 +1,4 @@
+From inside the docker (while having connection) run:
+
+cd /payload/libs
+pip3.7 download -r requirements.txt

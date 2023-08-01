@@ -6,12 +6,13 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=256]
       - id: end-of-file-fixer
+        exclude: ^src/icarus/data/
       - id: detect-private-key
       - id: trailing-whitespace
       - id: check-yaml
 
   - repo: https://github.com/psf/black
-    rev: 22.10.0
+    rev: 23.7.0
     hooks:
       - id: black
         language_version: python3.10

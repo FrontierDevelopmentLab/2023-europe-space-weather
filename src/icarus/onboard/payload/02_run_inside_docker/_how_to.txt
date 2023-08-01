@@ -1,0 +1,36 @@
+# 1 prep environment
+
+- get the docker image "spacecloud.unibap.com/unibap/framework-missionimage"
+
+sudo docker load -i framework-missionimage__d-orbit-iod2__byggvir_19-1-2023.tar
+
+- prepare folders: 'payload', 'results'
+
+mkdir results
+
+# 2 run docker commands
+
+sudo docker run -it -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw'  --rm -v "/$(pwd)/payload":/payload -v "/$(pwd)/results":/results -m 2g spacecloud.unibap.com/unibap/framework-missionimage:latest bash
+
+## (bonus: install libraries)
+source /opt/intel/openvino/bin/setupvars.sh -pyver 3.7
+
+###cd /payload/libs
+####pip3.7 download -r requirements.txt
+
+pip3.7 install --no-index --find-links /payload/libs -r /payload/libs/requirements.txt
+
+## inside the docker run:
+
+source /opt/intel/openvino/bin/setupvars.sh -pyver 3.7
+cd payload
+python3.7 openvino_use_full_model.py
+
+
+### (might need to update the image ...)
+pip3.7 install compressai==1.2.4
+python3.7 openvino_use_compressor.py
+
+# 3 reconstruct
+
+Outside of the docker in the main environment with compressAI run "reconstruct.py"
