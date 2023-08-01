@@ -23,6 +23,7 @@ compressor = compress(net)
 
 # Input to the model
 x = torch.randn(1, 3, 512, 512, requires_grad=True)
+# x = torch.randn(1, 3, 480, 640, requires_grad=True)
 
 example_out = compressor(x)
 print("example in:", x.shape)
@@ -38,7 +39,7 @@ torch.onnx.export(
     x,  # model input (or a tuple for multiple inputs)
     "onboard_net.onnx",  # where to save the model (can be a file or file-like object)
     export_params=True,  # store the trained parameter weights inside the model file
-    opset_version=14,  # the ONNX version to export the model to
+    opset_version=11,  # the ONNX version to export the model to
     do_constant_folding=True,  # whether to execute constant folding for optimization
     input_names=["input"],  # the model's input names
     output_names=["output"],  # the model's output names
@@ -53,7 +54,7 @@ torch.onnx.export(
     x,  # model input (or a tuple for multiple inputs)
     "onboard_compressor_y.onnx",  # where to save the model (can be a file or file-like object)
     export_params=True,  # store the trained parameter weights inside the model file
-    opset_version=14,  # the ONNX version to export the model to
+    opset_version=11,  # the ONNX version to export the model to
     do_constant_folding=True,  # whether to execute constant folding for optimization
     input_names=["input"],  # the model's input names
     output_names=["output"],  # the model's output names

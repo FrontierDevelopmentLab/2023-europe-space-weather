@@ -5,9 +5,8 @@ import openvino
 import openvino.inference_engine
 from openvino.inference_engine import IECore
 
-ie = IECore()
-
-import glob
+import os
+from glob import glob
 import logging
 import sys
 import time
@@ -18,6 +17,7 @@ import numpy as np
 import torch
 from astropy.io import fits
 from torchvision import transforms
+from PIL import Image
 
 # 1 load openvino model
 
@@ -88,9 +88,11 @@ def load_model(model_path, device="MYRIAD") -> Callable:
 
 BATCH_SIZE = 1
 
-example_input = np.random.rand(BATCH_SIZE, 3, 512, 512)
+example_input = np.random.rand(BATCH_SIZE, 3, 480, 640)
 # model_path = "onboard_net.onnx"
 model_path = "onboard_compressor_y.onnx"
+image_dir = "/home/chiaman/workspace/2023-europe-space-weather/data/cme_20140222_cor2_a_0/"
+output_dir = "/home/chiaman/workspace/2023-europe-space-weather/data/output/"
 
 # device = "CPU"
 device = "MYRIAD"
@@ -105,71 +107,47 @@ result = exec_net.infer({"input": example_input})
 for output in list(exec_net.outputs.keys()):
     print("output named", output, "gives", result[output].shape)
 
+image_list = sorted(glob("{}*.jpg".format(image_dir)))
+if len(image_list) == 0:
+    print("Warning: nothing found in directory")
 
 # 2 run with real data
+for input_filename in image_list:
 
-input_filename = "../../../data/secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts"
-orig_img = fits.getdata(input_filename)
-print(orig_img.shape, orig_img.dtype)
-print(np.min(orig_img), np.mean(orig_img), np.max(orig_img))
-# plt.imshow(orig_img, cmap="gray")
+    print(input_filename)
 
-img = orig_img.copy()
+    # orig_img = fits.getdata(input_filename)
 
-print(
-    "original data range (min,mean,max):", np.min(img), np.mean(img), np.max(img)
-)  # 0-16k
-
-img = np.asarray([img, img, img])  # fake rgb
-img = np.transpose(img, (1, 2, 0)).astype(np.int16)
-
-# normalise to [0, 255]
-img = (img - img.min()) / (img.max() - img.min())
-img = img.astype(np.float32)
-print(
-    "normalised data range (min,mean,max):", np.min(img), np.mean(img), np.max(img)
-)  # 0-1
-
-x = transforms.ToTensor()(img)
-x = x.unsqueeze(0).to("cpu")
-print("x data range (min,mean,max):", torch.min(x), torch.mean(x), torch.max(x))  # 0-1
-
-x_np = x.cpu().detach().numpy()
-print(x_np.shape)
-
-## Inference:
-
-result = exec_net.infer({"input": x_np})
-
-for output in list(exec_net.outputs.keys()):
-    print("output named", output, "gives", result[output].shape)
-
-decompressed = result["output"]
-print("decompressed.shape", decompressed.shape)
-
-decompressed_for_plot = np.transpose(decompressed[0], (1, 2, 0))
-
-fig, ax = plt.subplots(nrows=1, ncols=2)
-
-ax[0].title.set_text("Input")
-ax[0].imshow(orig_img, cmap="gray")
-ax[1].title.set_text("Decompressed from onxx model")
-ax[1].imshow(decompressed_for_plot, cmap="gray")
-plt.show()
+    im = np.array(Image.open(input_filename))
+    x = transforms.ToTensor()(im).unsqueeze(0) # TODO maybe we should unsqueeze with numpy instead
 
 
-# 3 timing
 
-num_images = 100
-print("Timing", num_images, "inference passes")
+    print("x data range (min,mean,max):", torch.min(x), torch.mean(x), torch.max(x))  # 0-1
 
-start = time.perf_counter()
-for _ in range(num_images):
+    x_np = x.cpu().detach().numpy()
+    print(x_np.shape)
+
+    ## Inference:
+
     result = exec_net.infer({"input": x_np})
-    example_output = result["output"]
-end = time.perf_counter()
-time_onnx = end - start
-print(
-    f"ONNX model in OpenVINO CPU Runtime/CPU: {time_onnx/num_images:.3f} "
-    f"seconds per image, FPS: {num_images/time_onnx:.2f}"
-)
+    print(result.keys())
+
+    for output in list(exec_net.outputs.keys()):
+        print("output named", output, "gives", result[output].shape)
+
+    compressed = result["output"]
+    print("compressed.shape", compressed.shape)
+
+    # save array for decompression "on ground"
+    out_fname = os.path.join(
+                        output_dir,
+                        "compressed_" +  os.path.basename(input_filename).replace(".jpg", ".npy")
+                )
+    np.save(out_fname, compressed)
+
+    # can't plot - latent space too large
+    # compressed_for_plot = np.transpose(compressed[0], (1, 2, 0))
+    # plt.imshow(compressed_for_plot)
+    # plt.savefig(img_fname, dpi=100)
+    # plt.close()
