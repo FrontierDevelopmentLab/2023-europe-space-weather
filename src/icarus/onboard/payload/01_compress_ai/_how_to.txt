@@ -32,4 +32,3 @@ python openvino_use_model.py
 cp onboard_net* ../02_run_inside_docker/payload/
 cp onboard_compressor_y* ../02_run_inside_docker/payload/
 cp saved_entropy_bottleneck.pt ../02_run_inside_docker/payload/
-
