@@ -58,7 +58,7 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	s_q = query_points.pow(2).sum(-1).pow(0.5)
 	s_t = 1
 	omega = torch.asin(s_t / s_q)
-	
+	#print("Max S_q: {} - Omega Minimum: {} - Omega = 0? {}".format(torch.max(s_q), torch.min(omega), (omega == 0).any()))
 	# z = distance Q to observer
 	z = z_vals * torch.norm(rays_d[..., None, :], dim=-1) # distance between observer and scattering point Q
 
@@ -85,11 +85,14 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
 
     # equations 23, 24, 29
-	intensity_T = I0 * torch.pi * sigma_e  / (2 * z ** 2) * ((1 - u) * C + u * D)
-	intensity_pB = I0 * torch.pi * sigma_e / (2 * z ** 2) * torch.sin(chi) ** 2 * ((1 - u) * A + u * B)
+	intensity_T = I0 * torch.pi * sigma_e  / (2 * z ** 2) * ((1 - u) * C + u * D) #I_T in paper - transverse
+	intensity_pB = I0 * torch.pi * sigma_e / (2 * z ** 2) * torch.sin(chi) ** 2 * ((1 - u) * A + u * B) #I_p in Paper
 
-	intensity_tB = 2 * intensity_T - intensity_pB
-
+	intensity_tB = 2 * intensity_T - intensity_pB #I_tot in paper
+	# Intensities being negative is unphysical
+	intensity_T = torch.abs(intensity_T)
+	intensity_pB = torch.abs(intensity_pB)
+	intensity_tB = torch.abs(intensity_tB)
 	if torch.isnan(intensity_tB).any() or torch.isnan(intensity_pB).any():
 		cond = torch.isnan(intensity_tB) | torch.isnan(intensity_pB)
 		print(f'Invalid values in intensity_tB or intensity_pB: query points {query_points[cond]}')
@@ -118,12 +121,11 @@ def raw2outputs(raw: torch.Tensor, # (batch, sampling_points, density_e)
 	emerging_tB = intensity_tB * electron_density * dists
 	emerging_pB = intensity_pB * electron_density * dists
 
-	
-
 	# sum all intensity contributions along LOS
 	pixel_tB = emerging_tB.sum(1)[:, None] 
 	pixel_pB = emerging_pB.sum(1)[:, None] 
-	print("pixel tB smaller than 0? - {}".format((pixel_tB < 0).any()))
+	#print("pixel tB smaller than 0? - {} - Value: {}".format((pixel_tB < 0).any(),(pixel_tB < 0).nonzero()))
+	#print("Intensity tB smaller than 0? - {} - Value: {}".format((intensity_tB < 0).any(),(intensity_tB < 0).nonzero()))
 	# height and density maps
 	# electron_density: (batch, sampling_points, 1), s_q: (batch, sampling_points, 1)
 	pixel_density = (electron_density * dists).sum(1)

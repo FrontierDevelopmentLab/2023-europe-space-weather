@@ -126,6 +126,9 @@ python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/b_raw/*.fits
 #                    #
 ######################
 
+#Prep_HAO_1view
+python -m sunerf.sunerf --wandb_name "hao_pinn_1view" --data_path_pB "/mnt/prep-data/prep_HAO_1view/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_1view/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_1view" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
 # Prep_HAO_2view
 python -m sunerf.sunerf --wandb_name "hao_pinn_2view" --data_path_pB "/mnt/prep-data/prep_HAO_2view/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_2view/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_2view" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 # prep_HAO_2view_backgrounds
