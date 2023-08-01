@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from openvino.runtime import Core
 
-device = "AUTO"
-
+# device = "AUTO"
+device = "CPU"
+# device = "MYRIAD"
 
 def download_file(
     url: PathLike,
@@ -93,7 +94,7 @@ def download_file(
 
     return filename.resolve()
 
-base_artifacts_dir = Path('./artifacts').expanduser()
+base_artifacts_dir = Path('../01_compress_ai/artifacts').expanduser()
 
 model_name = "v3-small_224_1.0_float"
 model_xml_name = f'{model_name}.xml'
