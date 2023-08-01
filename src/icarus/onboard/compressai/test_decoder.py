@@ -12,6 +12,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torchmetrics
 from compressai.zoo import bmshj2018_factorized
 from PIL import Image
 from torchvision import transforms
@@ -44,6 +45,13 @@ image_list = sorted(glob(os.path.join(input_image_path, "*.jpg")))
 
 maes = []
 mses = []
+msssims = []
+psnrs = []
+
+metric_msssim = torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure().to(
+    device
+)
+metric_psnr = torchmetrics.image.PeakSignalNoiseRatio().to(device)
 
 # iterate over all or choose one
 for path in tqdm(image_list, total=len(image_list)):
@@ -77,12 +85,16 @@ for path in tqdm(image_list, total=len(image_list)):
     # then compare
     mae = torch.mean((x_hat - x).abs()).squeeze().cpu()
     mse = torch.mean((x_hat - x) ** 2).squeeze().cpu()
-    print("Metrics:", mae, mse)
+    msssim = metric_msssim(x_hat, x).detach().cpu()
+    psnr = metric_psnr(x_hat, x).detach().cpu()
+    print("Metrics:", mae, mse, msssim, psnr)
     maes.append(mae)
     mses.append(mse)
+    msssims.append(msssim)
+    psnrs.append(psnr)
 
     # break  # only run on one image
 
-print(
-    np.mean(maes), np.mean(mses)
-)  # 0.008, 0.0009 before # 0.018415472 0.0012347241 now
+# encode on vm:    0.00804779 0.00090298755 0.9896204 30.445059
+# encode on stick: 0.018415472 0.0012347241 0.9880638 29.085772
+print(np.mean(maes), np.mean(mses), np.mean(msssims), np.mean(psnrs))
