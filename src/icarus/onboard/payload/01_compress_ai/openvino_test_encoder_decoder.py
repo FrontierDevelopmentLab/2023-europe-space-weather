@@ -1,23 +1,22 @@
-from pathlib import Path
-
-# Works with older 2021 version:
-import openvino
-import openvino.inference_engine
-from openvino.inference_engine import IECore
-
-import os
-from glob import glob
 import logging
+import os
 import sys
 import time
+from glob import glob
+from pathlib import Path
 from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Works with older 2021 version:
+import openvino
+import openvino.inference_engine
 import torch
 from astropy.io import fits
-from torchvision import transforms
+from openvino.inference_engine import IECore
 from PIL import Image
+from torchvision import transforms
 
 # 1 load openvino model
 
@@ -42,6 +41,7 @@ class OpenVinoModel:
             new_shape = [batch] + self.net.input_info[input_layer].input_data.shape[1:]
             shapes.update({input_layer: new_shape})
         self.net.reshape(shapes)
+
 
 def device_available():
     ie = IECore()
@@ -91,7 +91,9 @@ BATCH_SIZE = 1
 example_input = np.random.rand(BATCH_SIZE, 3, 480, 640)
 # model_path = "onboard_net.onnx"
 model_path = "onboard_compressor_y.onnx"
-image_dir = "/home/chiaman/workspace/2023-europe-space-weather/data/cme_20140222_cor2_a_0/"
+image_dir = (
+    "/home/chiaman/workspace/2023-europe-space-weather/data/cme_20140222_cor2_a_0/"
+)
 output_dir = "/home/chiaman/workspace/2023-europe-space-weather/data/output/"
 
 # device = "CPU"
@@ -113,17 +115,18 @@ if len(image_list) == 0:
 
 # 2 run with real data
 for input_filename in image_list:
-
     print(input_filename)
 
     # orig_img = fits.getdata(input_filename)
 
     im = np.array(Image.open(input_filename))
-    x = transforms.ToTensor()(im).unsqueeze(0) # TODO maybe we should unsqueeze with numpy instead
+    x = transforms.ToTensor()(im).unsqueeze(
+        0
+    )  # TODO maybe we should unsqueeze with numpy instead
 
-
-
-    print("x data range (min,mean,max):", torch.min(x), torch.mean(x), torch.max(x))  # 0-1
+    print(
+        "x data range (min,mean,max):", torch.min(x), torch.mean(x), torch.max(x)
+    )  # 0-1
 
     x_np = x.cpu().detach().numpy()
     print(x_np.shape)
@@ -141,9 +144,9 @@ for input_filename in image_list:
 
     # save array for decompression "on ground"
     out_fname = os.path.join(
-                        output_dir,
-                        "compressed_" +  os.path.basename(input_filename).replace(".jpg", ".npy")
-                )
+        output_dir,
+        "compressed_" + os.path.basename(input_filename).replace(".jpg", ".npy"),
+    )
     np.save(out_fname, compressed)
 
     # can't plot - latent space too large

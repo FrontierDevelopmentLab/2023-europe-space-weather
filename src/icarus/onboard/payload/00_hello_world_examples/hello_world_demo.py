@@ -1,4 +1,5 @@
 import os
+import sys
 import threading
 import time
 import urllib.parse
@@ -6,19 +7,15 @@ from os import PathLike
 from pathlib import Path
 from typing import List, NamedTuple, Optional, Tuple
 
-import numpy as np
-from openvino.runtime import Core, get_version
-from pathlib import Path
-import sys
-
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from openvino.runtime import Core
+from openvino.runtime import Core, get_version
 
 # device = "AUTO"
 device = "CPU"
 # device = "MYRIAD"
+
 
 def download_file(
     url: PathLike,
@@ -43,8 +40,8 @@ def download_file(
     :param timeout: Number of seconds before cancelling the connection attempt
     :return: path to downloaded file
     """
-    from tqdm.notebook import tqdm_notebook
     import requests
+    from tqdm.notebook import tqdm_notebook
 
     filename = filename or Path(urllib.parse.urlparse(url).path).name
     chunk_size = 16384  # make chunks bigger so that not too many updates are triggered for Jupyter front-end
@@ -63,16 +60,18 @@ def download_file(
         filename = directory / Path(filename)
 
     try:
-        response = requests.get(url=url,
-                                headers={"User-agent": "Mozilla/5.0"},
-                                stream=True)
+        response = requests.get(
+            url=url, headers={"User-agent": "Mozilla/5.0"}, stream=True
+        )
         response.raise_for_status()
-    except requests.exceptions.HTTPError as error:  # For error associated with not-200 codes. Will output something like: "404 Client Error: Not Found for url: {url}"
+    except (
+        requests.exceptions.HTTPError
+    ) as error:  # For error associated with not-200 codes. Will output something like: "404 Client Error: Not Found for url: {url}"
         raise Exception(error) from None
     except requests.exceptions.Timeout:
         raise Exception(
-                "Connection timed out. If you access the internet through a proxy server, please "
-                "make sure the proxy is set in the shell from where you launched Jupyter."
+            "Connection timed out. If you access the internet through a proxy server, please "
+            "make sure the proxy is set in the shell from where you launched Jupyter."
         ) from None
     except requests.exceptions.RequestException as error:
         raise Exception(f"File downloading failed with error: {error}") from None
@@ -80,7 +79,6 @@ def download_file(
     # download the file if it does not exist, or if it exists with an incorrect file size
     filesize = int(response.headers.get("Content-length", 0))
     if not filename.exists() or (os.stat(filename).st_size != filesize):
-
         with open(filename, "wb") as file_object:
             for chunk in response.iter_content(chunk_size):
                 file_object.write(chunk)
@@ -94,21 +92,22 @@ def download_file(
 
     return filename.resolve()
 
-base_artifacts_dir = Path('../01_compress_ai/artifacts').expanduser()
+
+base_artifacts_dir = Path("../01_compress_ai/artifacts").expanduser()
 
 model_name = "v3-small_224_1.0_float"
-model_xml_name = f'{model_name}.xml'
-model_bin_name = f'{model_name}.bin'
+model_xml_name = f"{model_name}.xml"
+model_bin_name = f"{model_name}.bin"
 
 model_xml_path = base_artifacts_dir / model_xml_name
 
-base_url = 'https://storage.openvinotoolkit.org/repositories/openvino_notebooks/models/mobelinet-v3-tf/FP32/'
+base_url = "https://storage.openvinotoolkit.org/repositories/openvino_notebooks/models/mobelinet-v3-tf/FP32/"
 
 if not model_xml_path.exists():
     download_file(base_url + model_xml_name, model_xml_name, base_artifacts_dir)
     download_file(base_url + model_bin_name, model_bin_name, base_artifacts_dir)
 else:
-    print(f'{model_name} already downloaded to {base_artifacts_dir}')
+    print(f"{model_name} already downloaded to {base_artifacts_dir}")
 
 core = Core()
 print(device)
@@ -128,7 +127,7 @@ input_image = cv2.resize(src=image, dsize=(224, 224))
 
 # Reshape to model input shape.
 input_image = np.expand_dims(input_image, 0)
-plt.imshow(image);
+plt.imshow(image)
 
 
 result_infer = compiled_model([input_image])[output_layer]
@@ -139,7 +138,6 @@ imagenet_classes = open("imagenet_2012.txt").read().splitlines()
 
 # The model description states that for this model, class 0 is a background.
 # Therefore, a background must be added at the beginning of imagenet_classes.
-imagenet_classes = ['background'] + imagenet_classes
+imagenet_classes = ["background"] + imagenet_classes
 
 print("output class >>", imagenet_classes[result_index])
-

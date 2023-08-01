@@ -43,6 +43,7 @@ class OpenVinoModel:
             shapes.update({input_layer: new_shape})
         self.net.reshape(shapes)
 
+
 def device_available():
     ie = IECore()
     devs = ie.available_devices
