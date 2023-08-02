@@ -54,11 +54,13 @@ cd docker/ground
 Then mount the data and output folders and run, e.g. from the root directory:
 
 ```bash
-docker run --gpus 1 -it --rm -v data:/icarus/data -v output:/icarus/output -v results:/icarus/results helio-ground --data_path_pB "data/prep-data/prep_HAO_1view/*pB*.fits" --data_path_tB "data/prep-data/prep_HAO_1view/*tB*.fits" --path_to_save "results/training/HAO_1view" --train "config/train.yaml" --hyperparameters "config/hyperparams_icarus.yaml"
+docker run --gpus all -it --rm -v data:/icarus/data -v output:/icarus/output -v results:/icarus/results helio-ground --data_path_pB "data/prep-data/prep_HAO_1view/*pB*.fits" --data_path_tB "data/prep-data/prep_HAO_1view/*tB*.fits" --path_to_save "results/training/HAO_1view" --train "config/train.yaml" --hyperparameters "config/hyperparams_icarus.yaml"
 ```
 
 You'll be asked to login to wandb or you can ignore this and train without it.
 
 # Evaluate
 
-Once you've trained a volume, you can export the reuls
+Once you've trained a volume, you can export the results as follows:
+
+TODO
