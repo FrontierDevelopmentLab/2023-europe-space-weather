@@ -95,6 +95,7 @@ for path in tqdm(image_list, total=len(image_list)):
 
     # break  # only run on one image
 
+#                  mae        mse           msssim    psnr
 # encode on vm:    0.00804779 0.00090298755 0.9896204 30.445059
 # encode on stick: 0.018415472 0.0012347241 0.9880638 29.085772
 print(np.mean(maes), np.mean(mses), np.mean(msssims), np.mean(psnrs))
