@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import random
 import sys
@@ -29,24 +30,48 @@ from lightning.pytorch import (
     Trainer,
     seed_everything,
 )
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import (
+    LambdaCallback,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.tuner.tuning import Tuner
 
 
 class NCompressor(LightningModule):
     def __init__(
-        self, quality=2, learning_rate=1e-4, learning_rate_schedule_patience=10
+        self,
+        quality=2,
+        loss="mse",
+        learning_rate=1e-4,
+        learning_rate_schedule_patience=10,
     ):
         super().__init__()
         self.save_hyperparameters()
 
         # define model
         self.model = bmshj2018_factorized(quality=quality, pretrained=True)
-        self.loss = (
-            torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure()
-        )  # hala says this was unstable - maybe train with mse
-        self.metric = torchmetrics.image.PeakSignalNoiseRatio()
+
+        # msssim may be unstable
+        if self.hparams.loss == "mssim":
+            self.loss = torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure()
+        elif self.hparams.loss == "mse":
+            self.loss = (
+                torchmetrics.MeanSquaredError()
+            )  # TODO maybe this needs to be flattened?
+        elif self.hparams.loss == "rmse_sw":
+            self.loss = torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow()
+        elif self.hparams.loss == "psnr":
+            self.loss = torchmetrics.image.PeakSignalNoiseRatio()
+        else:
+            print(self.hparams.loss, "loss not implemented")
+
+        self.metric = [
+            torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure(),
+            torchmetrics.image.PeakSignalNoiseRatio(),
+            torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow(),
+        ]
 
     def forward(self, x):
         return self.model.forward(x)
@@ -103,8 +128,10 @@ class NCompressor(LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        metric = self.metric.compute()
-        self.log("PSNR:", metric)
+        # metric = self.metric.compute()
+        # self.log("PSNR:", metric)
+        metrics = self.metric.compute()
+        self.log({"SSIM": metrics[0], "PSNR": metrics[1], "RMSE_SW": metrics[2]})
 
     def configure_optimizers(self):
         from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -152,63 +179,86 @@ def get_config(config_path):
     return config
 
 
+# def save_state(ncompressor: NCompressor, data_module: FitsDataModule, save_path):
+#     output_path = '/'.join(save_path.split('/')[0:-1])
+#     os.makedirs(output_path, exist_ok=True)
+#     torch.save({'model': ncompressor.model,
+#                 'config': },
+#                 save_path)
+
+
 if __name__ == "__main__":
     seed_everything(42)
-
-    wandb.init(project="NCompression", entity="ssa_live_twin", mode="offline")
-
-    wandb_logger = WandbLogger()
 
     # read in yaml variables from config
     PROJECT_DIR = dirname(dirname(dirname(dirname(dirname(__file__)))))
     config_path = os.path.join(PROJECT_DIR, "config")
     config = get_config(config_path)
 
-    ckpt_dir = config["train"]["ckpt_dir"]
-    log_dir = config["train"]["log_dir"]
-    out_dir = config["train"]["out_dir"]
-
-    print(config)
-    sys.exit()
+    wandb.init(
+        project="NCompression",
+        entity="ssa_live_twin",
+        config=config,
+        offline=config["train"]["wandb_offline"],
+    )  # , mode="offline")
+    wandb_logger = WandbLogger()
 
     # torch.set_float32_matmul_precision('medium' | 'high')
 
+    # save best and last model
     checkpoint_callback = ModelCheckpoint(
+        dirpath=wandb.config.train.ckpt_dir,
         monitor="val/loss",
         mode="min",
-        dirpath=log_dir,
         auto_insert_metric_name=True,
         save_top_k=1,
         save_last=True,
         verbose=True,
+        every_n_train_steps=wandb.config.train.log_every_n_steps,
     )
-    csv_logger = CSVLogger(save_dir=args.log_dir, name="logs")
+
+    # save_callback = LambdaCallback(on_validation_end=lambda *args: save_state(sunerf, data_module, save_path))
+
+    csv_logger = CSVLogger(save_dir=wandb.config.train.log_dir, name="logs")
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
+    model = NCompressor(
+        quality=wandb.config.train.quality,
+        loss=wandb.config.train.loss,
+        learning_rate=wandb.config.train.learning_rate,
+        learning_rate_schedule_patience=wandb.config.train.learning_rate_schedule_patience,
+    )
+
+    # get checkpoint path if resume training from previous model
+    # TODO make into a function
+    if wandb.config.train.resume_from_checkpoint:
+        if wandb.config.train.ckpt_path == "last":
+            ckpt_path = os.path.join(wandb.config.train.ckpt_dir, "last.ckpt")
+        else:
+            ckpt_path = wandb.config.train.ckpt_path
+        logging.info(f"Load checkpoint: {ckpt_path}")
+        # model.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu'))['state_dict'])
+    else:
+        ckpt_path = None
+
+    # TODO: just take from config not everything
+    dm = FitsDataModule()  # pass andb.config.data_loader?
+
     trainer = Trainer(
-        max_epochs=100,
+        max_epochs=wandb.config.train.nepochs,
         accelerator="auto",
         callbacks=[lr_monitor, checkpoint_callback],
         logger=[csv_logger, wandb_logger],
     )
 
-    wandb.summary.update(
-        {
-            "model": args.model,
-            "batch_size": args.batch_size,
-            "learning_rate": args.learning_rate,
-            "checkpoint": args.checkpoint_dir,
-        }
-    )
-
-    model = NCompressor(learning_rate=args.learning_rate)
-
-    dm = (
-        FitsDataModule()
-    )  # TODO: add config parameters in command arguments # just takes everything?
-
-    trainer.fit(model, datamodule=dm)
+    logging.info("Start model training")
+    trainer.fit(model, datamodule=dm, ckpt_path=ckpt_path)
     trainer.test(model, datamodule=dm)
+
+    trainer.save_checkpoint(os.path.join(wandb.config.train.ckpt_dir, "final.ckpt"))
+
+    # TODO save best and last to separate dir?
+    # out_dir = config["train"]["out_dir"]
 
     wandb.finish()

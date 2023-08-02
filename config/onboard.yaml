@@ -2,14 +2,24 @@ data_loader:
   data_dir: /mnt/onboard_data/training_data/v1
 
 train:
-   run_id: 20230802_debug1
+   run_id: 20230802_debug1 # if missing auto generates unique
 
    run_dir: /mnt/training/
    log_dir: /mnt/training/<run_id>/logs/
    ckpt_dir: /mnt/training/<run_id>/checkpoints/
    out_dir: /mnt/training/<run_id>/
 
+   wandb_offline: True
+
+   resume_from_checkpoint: True
+   ckpt_path: last # path or "last"
+
    model: bmshj2018_factorized
-   batch_size: 4
+   quality: 2
    learning_rate: 1.e-3
+   learning_rate_schedule_patience: 10
+   batch_size: 4
    img_size: 512
+   loss: mssim
+   nepochs: 100
+   log_every_n_steps: 10
