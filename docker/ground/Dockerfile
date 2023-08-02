@@ -7,7 +7,10 @@ WORKDIR /icarus
 # install python dependencies
 ADD ./2023-europe-space-weather /icarus
 
+RUN apt install -y libjpeg-dev libpng-dev
+
 # copy code
+RUN pip install --upgrade --force-reinstall torch
 RUN pip install -e .[ground]
 
-CMD [ "/bin/bash" ]
+ENTRYPOINT ["python", "-m", "sunerf.sunerf"]

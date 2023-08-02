@@ -22,6 +22,7 @@ onboard = [
 ground = [
     "sunpy[all]",
     "wandb",
+    "ujson",
     "pytorch-lightning==1.9.3",
     "InstrumentToInstrument@git+https://github.com/RobertJaro/InstrumentToInstrument.git"
 ]
