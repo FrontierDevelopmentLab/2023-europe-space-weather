@@ -204,6 +204,16 @@ wandb/
 *.jpg
 *.png
 *.mp4
+*.xml
+*.onnx
+*.bin
+*.mapping
+*.pt
 
 # Pyenv
 .python-version
+
+
+*imagenet_2012.txt
+data/
+*l_openvino_toolkit*

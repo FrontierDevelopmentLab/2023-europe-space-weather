@@ -20,6 +20,7 @@ python openvino_save_model.py
 
 mo --input_model ./onboard_net.onnx
 mo --input_model ./onboard_compressor_y.onnx
+mo --input_model ./onboard_entropy_bottleneck.onnx
 
 
 ## use the model
