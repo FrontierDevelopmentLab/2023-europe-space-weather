@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from functools import lru_cache
 from os.path import dirname
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -128,16 +129,25 @@ class NCompressor(LightningModule):
 
 
 def get_config(config_path):
-    """ """
+    """
+    read in yaml config, generate path dirs
+    """
     with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
         config = yaml.load(f, Loader=yaml.Loader)
 
+    # generate unique run_id if not given and use in all output paths
     if "run_id" not in config["train"]:
         config["train"]["run_id"] = datetime.now().strftime("%Y%m%d%H%M%S")
-    for key in config["train"]:
-        config["train"][key] = config["train"][key].replace(
-            "<run_id>", config["train"]["run_id"]
-        )
+    for key in config["train"].keys():
+        if type(config["train"][key]) == str:
+            config["train"][key] = config["train"][key].replace(
+                "<run_id>", config["train"]["run_id"]
+            )
+
+    # check if directories exist and generate if not
+    for key in config["train"].keys():
+        if "dir" in key:
+            Path(config["train"][key]).mkdir(parents=True, exist_ok=True)
 
     return config
 
@@ -145,7 +155,7 @@ def get_config(config_path):
 if __name__ == "__main__":
     seed_everything(42)
 
-    wandb.init(project="NCompression", entity="ssa_live_twin")
+    wandb.init(project="NCompression", entity="ssa_live_twin", mode="offline")
 
     wandb_logger = WandbLogger()
 
@@ -153,6 +163,10 @@ if __name__ == "__main__":
     PROJECT_DIR = dirname(dirname(dirname(dirname(dirname(__file__)))))
     config_path = os.path.join(PROJECT_DIR, "config")
     config = get_config(config_path)
+
+    ckpt_dir = config["train"]["ckpt_dir"]
+    log_dir = config["train"]["log_dir"]
+    out_dir = config["train"]["out_dir"]
 
     print(config)
     sys.exit()
@@ -162,7 +176,7 @@ if __name__ == "__main__":
     checkpoint_callback = ModelCheckpoint(
         monitor="val/loss",
         mode="min",
-        dirpath=args.checkpoint_dir,
+        dirpath=log_dir,
         auto_insert_metric_name=True,
         save_top_k=1,
         save_last=True,
