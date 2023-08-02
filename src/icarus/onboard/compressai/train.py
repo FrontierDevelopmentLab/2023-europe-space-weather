@@ -204,6 +204,10 @@ if __name__ == "__main__":
     wandb_logger = WandbLogger()
 
     # torch.set_float32_matmul_precision('medium' | 'high')
+    print(wandb.config)
+    print(wandb.config.train)
+    print(wandb.config.train["ckpt_dir"])
+    print(wandb.config.train.ckpt_dir)
 
     # save best and last model
     checkpoint_callback = ModelCheckpoint(
@@ -243,7 +247,7 @@ if __name__ == "__main__":
         ckpt_path = None
 
     # TODO: just take from config not everything
-    dm = FitsDataModule()  # pass wandb.config.data_loader?
+    dm = FitsDataModule(wandb.config.data_loader)
 
     trainer = Trainer(
         max_epochs=wandb.config.train.nepochs,
