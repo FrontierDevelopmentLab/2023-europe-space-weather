@@ -1,3 +1,15 @@
-drive_locations:
-  datapath: /mnt/onboard_data
-  plotpath: /mnt/onboard_data/Plots
+data_loader:
+  data_dir: /mnt/onboard_data/training_data/v1
+
+train:
+   run_id: 20230802_debug1
+
+   run_dir: /mnt/training/
+   log_dir: /mnt/training/<run_id>/logs/
+   ckpt_dir: /mnt/training/<run_id>/checkpoints/
+   out_dir: /mnt/training/<run_id>/
+
+   model: bmshj2018_factorized
+   batch_size: 4
+   learning_rate: 1.e-3
+   img_size: 512

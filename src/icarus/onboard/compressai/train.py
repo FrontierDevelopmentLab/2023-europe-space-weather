@@ -1,12 +1,15 @@
 import argparse
 import os
 import random
+import sys
 from datetime import datetime
 from functools import lru_cache
+from os.path import dirname
 from typing import Optional
 
 import numpy as np
 import torch
+import yaml
 from compressai.zoo import bmshj2018_factorized
 from PIL import Image
 from rich.progress import track
@@ -39,7 +42,9 @@ class NCompressor(LightningModule):
 
         # define model
         self.model = bmshj2018_factorized(quality=quality, pretrained=True)
-        self.loss = torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure()
+        self.loss = (
+            torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure()
+        )  # hala says this was unstable - maybe train with mse
         self.metric = torchmetrics.image.PeakSignalNoiseRatio()
 
     def forward(self, x):
@@ -122,28 +127,42 @@ class NCompressor(LightningModule):
         return
 
 
+def get_config(config_path):
+    """ """
+    with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+
+    if "run_id" not in config["train"]:
+        config["train"]["run_id"] = datetime.now().strftime("%Y%m%d%H%M%S")
+    for key in config["train"]:
+        config["train"][key] = config["train"][key].replace(
+            "<run_id>", config["train"]["run_id"]
+        )
+
+    return config
+
+
 if __name__ == "__main__":
     seed_everything(42)
 
     wandb.init(project="NCompression", entity="ssa_live_twin")
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="bmshj2018_factorized")
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--learning_rate", type=float, default=1e-3)
-    parser.add_argument("--tile_size", type=int, default=512)
-    parser.add_argument("--dataset", type=str, default="/mnt/onboard_data/checkpoints/")
-    parser.add_argument("--log_dir", type=str, default="/mnt/onboard_data/logs/")
-    args = parser.parse_args()
-
     wandb_logger = WandbLogger()
+
+    # read in yaml variables from config
+    PROJECT_DIR = dirname(dirname(dirname(dirname(dirname(__file__)))))
+    config_path = os.path.join(PROJECT_DIR, "config")
+    config = get_config(config_path)
+
+    print(config)
+    sys.exit()
 
     # torch.set_float32_matmul_precision('medium' | 'high')
 
     checkpoint_callback = ModelCheckpoint(
         monitor="val/loss",
         mode="min",
-        dirpath=os.path.join(args.log_dir, "checkpoints"),
+        dirpath=args.checkpoint_dir,
         auto_insert_metric_name=True,
         save_top_k=1,
         save_last=True,
@@ -165,13 +184,15 @@ if __name__ == "__main__":
             "model": args.model,
             "batch_size": args.batch_size,
             "learning_rate": args.learning_rate,
-            "dataset": args.dataset,
+            "checkpoint": args.checkpoint_dir,
         }
     )
 
     model = NCompressor(learning_rate=args.learning_rate)
 
-    dm = FitsDataModule()  # TODO: add config parameters in command arguments
+    dm = (
+        FitsDataModule()
+    )  # TODO: add config parameters in command arguments # just takes everything?
 
     trainer.fit(model, datamodule=dm)
     trainer.test(model, datamodule=dm)
