@@ -6,7 +6,8 @@ authors = [
     { name = "", email = "user@example.com" }
 ]
 dependencies = [
-    "torch>=2.0"
+    "torch>=2.0",
+    "wandb",
 ]
 
 [project.optional-dependencies]
@@ -19,7 +20,10 @@ onboard = [
     "openvino"
 ]
 ground = [
-    "sunpy"
+    "sunpy[all]",
+    "wandb",
+    "pytorch-lightning==1.9.3",
+    "InstrumentToInstrument@git+https://github.com/RobertJaro/InstrumentToInstrument.git"
 ]
 
 
