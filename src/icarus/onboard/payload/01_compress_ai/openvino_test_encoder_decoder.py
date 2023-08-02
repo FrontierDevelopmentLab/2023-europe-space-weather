@@ -91,6 +91,7 @@ BATCH_SIZE = 1
 example_input = np.random.rand(BATCH_SIZE, 3, 480, 640)
 # model_path = "onboard_net.onnx"
 model_path = "onboard_compressor_y.onnx"
+bottleneck_model_path = "onboard_entropy_bottleneck.onnx"
 image_dir = (
     "/home/chiaman/workspace/2023-europe-space-weather/data/cme_20140222_cor2_a_0/"
 )
@@ -108,6 +109,12 @@ result = exec_net.infer({"input": example_input})
 
 for output in list(exec_net.outputs.keys()):
     print("output named", output, "gives", result[output].shape)
+
+# load the entropy bottleneck model
+bottleneck_model = OpenVinoModel(ie, bottleneck_model_path)
+bottleneck_net = ie.load_network(
+    network=bottleneck_model.net, device_name=device, config=None, num_requests=1
+)
 
 image_list = sorted(glob("{}*.jpg".format(image_dir)))
 if len(image_list) == 0:
@@ -139,15 +146,22 @@ for input_filename in image_list:
     for output in list(exec_net.outputs.keys()):
         print("output named", output, "gives", result[output].shape)
 
-    compressed = result["output"]
-    print("compressed.shape", compressed.shape)
+    y_compressed = result["output"]
+    print("y_compressed.shape", y_compressed.shape)
+
+    result = bottleneck_net.infer({"input": y_compressed})
+    y_strings = result["output"]
 
     # save array for decompression "on ground"
     out_fname = os.path.join(
         output_dir,
-        "compressed_" + os.path.basename(input_filename).replace(".jpg", ".npy"),
+        "compressed_" + os.path.basename(input_filename).replace(".jpg", ""), # .npy
     )
-    np.save(out_fname, compressed)
+    # np.save(out_fname, y_compressed)
+
+    # assumes one element in y_strings list as bytes (which seems to generally be true)
+    with open(out_fname, 'wb') as f: 
+        f.write(y_strings[0])
 
     # can't plot - latent space too large
     # compressed_for_plot = np.transpose(compressed[0], (1, 2, 0))

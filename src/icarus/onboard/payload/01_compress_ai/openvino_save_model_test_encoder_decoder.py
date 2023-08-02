@@ -22,7 +22,8 @@ compressor = compress(net)
 
 
 # Input to the model
-x = torch.randn(1, 3, 512, 512, requires_grad=True)
+x = torch.randn(1, 3, 480, 640, requires_grad=True)
+y = torch.randn(1, 192, 30, 40, requires_grad=True)
 
 example_out = compressor(x)
 print("example in:", x.shape)
@@ -60,10 +61,17 @@ torch.onnx.export(
     verbose=True,
 )
 
-# Save the bottleneck encoder separately
-entropy_model_name = "saved_entropy_bottleneck.pt"
-torch.save(net.entropy_bottleneck, entropy_model_name)
-
+torch.onnx.export(
+    net.entropy_bottleneck,  # model being run
+    y,  # model input (or a tuple for multiple inputs)
+    "onboard_entropy_bottleneck.onnx",  # where to save the model (can be a file or file-like object)
+    export_params=True,  # store the trained parameter weights inside the model file
+    opset_version=11,  # the ONNX version to export the model to
+    do_constant_folding=True,  # whether to execute constant folding for optimization
+    input_names=["input"],  # the model's input names
+    output_names=["output"],  # the model's output names
+    verbose=True,
+)
 
 print("done!")
 print("now run:")
