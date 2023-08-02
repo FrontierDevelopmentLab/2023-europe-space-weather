@@ -199,8 +199,8 @@ if __name__ == "__main__":
         project="NCompression",
         entity="ssa_live_twin",
         config=config,
-        offline=config["train"]["wandb_offline"],
-    )  # , mode="offline")
+        mode=config["train"]["wandb_mode"],
+    )
     wandb_logger = WandbLogger()
 
     # torch.set_float32_matmul_precision('medium' | 'high')
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         ckpt_path = None
 
     # TODO: just take from config not everything
-    dm = FitsDataModule()  # pass andb.config.data_loader?
+    dm = FitsDataModule()  # pass wandb.config.data_loader?
 
     trainer = Trainer(
         max_epochs=wandb.config.train.nepochs,

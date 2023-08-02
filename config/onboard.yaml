@@ -1,5 +1,6 @@
 data_loader:
   data_dir: /mnt/onboard_data/training_data/v1
+  input_fnames_list : /mnt/onboard_data/training_data/fnames1.csv
 
 train:
    run_id: 20230802_debug1 # if missing auto generates unique
@@ -9,7 +10,7 @@ train:
    ckpt_dir: /mnt/training/<run_id>/checkpoints/
    out_dir: /mnt/training/<run_id>/
 
-   wandb_offline: True
+   wandb_mode: offline # online or offline or disabled
 
    resume_from_checkpoint: True
    ckpt_path: last # path or "last"
@@ -20,6 +21,6 @@ train:
    learning_rate_schedule_patience: 10
    batch_size: 4
    img_size: 512
-   loss: mssim
+   loss: mssim  # mssim or mse or rmse_sw or psnr
    nepochs: 100
    log_every_n_steps: 10
