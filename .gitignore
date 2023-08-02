@@ -192,6 +192,8 @@ Temporary Items
 
 # custom
 wandb/
+output/
+results/
 *.jpg
 *.png
 *.mp4
