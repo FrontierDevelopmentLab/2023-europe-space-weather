@@ -31,9 +31,9 @@ logging.basicConfig(level=logging.INFO)
 cwd = os.getcwd()
 data_path = cwd
 config_path = os.path.join(cwd, "..", "..", "..", "config")
-with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
-    data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
-
+# with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+#    data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
+data_path = "/mnt/onboard_data/data/cor2"
 ICARUS_DIR = dirname(dirname(__file__))
 PLOT_DIR = os.path.join(cwd, "plots")
 CME_DIR = os.path.join(PLOT_DIR, "cme")
@@ -108,161 +108,172 @@ if __name__ == "__main__":
         fits_module = FitsDataModule()
         fits_module.setup("Testing")
         fits_loader = fits_module.val_dataloader()
+
+        compression_ratios = np.linspace(0, 1, 11)
+
         with Progress() as progress:
             task = progress.add_task("Batch Visualization", total=len(fits_loader))
             for batch in fits_loader:
                 plt.close("all")
                 images, event_index, fts_file = batch
                 for i in range(images.size(0)):
-                    image_np = np.log1p(
-                        images[i].numpy().transpose(1, 2, 0)
-                    )  # .astype(np.float32)
+                    for c in compression_ratios:
+                        plt.close("all")
+                        image_np = np.log1p(
+                            images[i].numpy().transpose(1, 2, 0)
+                        )  # .astype(np.float32)
 
-                    image_stretch = 255 * scale_minmax(image_np)
-                    image_stretch = image_stretch.astype(np.uint8)
+                        image_stretch = 255 * scale_minmax(image_np)
+                        image_stretch = image_stretch.astype(np.uint8)
 
-                    image_pil = Image.fromarray(image_stretch)
-                    image_name = fts_file[i].split(".")[0]
-                    initial_name = image_name + ".png"
-                    is_cme = event_index[i]
-                    dir_ = CME_DIR if is_cme else OTHER_DIR
-                    plotname = os.path.join(dir_, initial_name)
+                        image_pil = Image.fromarray(image_stretch)
+                        image_name = fts_file[i].split(".")[0]
+                        initial_name = image_name + ".png"
+                        is_cme = event_index[i]
+                        dir_ = CME_DIR if is_cme else OTHER_DIR
+                        plotname = os.path.join(dir_, initial_name)
 
-                    image_pil.save(plotname)
+                        image_pil.save(plotname)
 
-                    x = images[i].to(device).unsqueeze(0) / 65535
-                    # x = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x)
-                    # Compression and Decompression
-                    with torch.no_grad():
-                        out_net = net.forward(x)
-                    out_net["x_hat"] += out_net["x_hat"].min()  # .clamp_(0, 1)
-                    # print(out_net.keys())
-                    # print(out_net["x_hat"].shape)
+                        x = images[i].to(device).unsqueeze(0) / 65535
+                        # x = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x)
+                        # Compression and Decompression
+                        with torch.no_grad():
+                            out_net = net.forward(x)
+                        out_net["x_hat"] += out_net["x_hat"].min()  # .clamp_(0, 1)
+                        # print(out_net.keys())
+                        # print(out_net["x_hat"].shape)
 
-                    rec_net = (
-                        out_net["x_hat"]
-                        .squeeze()
-                        .cpu()
-                        .detach()
-                        .numpy()
-                        .transpose((1, 2, 0))
-                    )
-                    reconstructed_name = image_name + "_reconstructed.png"
-                    plotname = os.path.join(dir_, reconstructed_name)
-                    plt.figure(figsize=(12, 9))
-                    plt.axis("off")
-                    plt.imshow(scale_minmax(rec_net))
-                    plt.show()
-                    plt.savefig(plotname)
-
-                    # comparison
-                    diff = (
-                        torch.mean((out_net["x_hat"] - x).abs(), axis=1)
-                        .squeeze()
-                        .cpu()
-                        .detach()
-                        .numpy()
-                    )
-
-                    fix, axes = plt.subplots(1, 5, figsize=(16, 12))
-                    for ax in axes:
-                        ax.axis("off")
-
-                    im = axes[0].imshow(
-                        image_np[:, :, 0]
-                    )  # Check the shape, should be the raw image
-                    # axes[0].imshow(image_pil)
-                    axes[0].title.set_text(
-                        "Original - CME present: {}".format(
-                            "Yes" if is_cme == 1 else "No"
+                        rec_net = (
+                            out_net["x_hat"]
+                            .squeeze()
+                            .cpu()
+                            .detach()
+                            .numpy()
+                            .transpose((1, 2, 0))
                         )
-                    )
+                        reconstructed_name = image_name + "_reconstructed.png"
+                        plotname = os.path.join(dir_, reconstructed_name)
+                        plt.figure(figsize=(12, 9))
+                        plt.axis("off")
+                        plt.imshow(scale_minmax(rec_net))
+                        plt.show()
+                        plt.savefig(plotname)
 
-                    # Estimate bits per pixel
-                    n_pixels = np.product(image_np[:, :, 0].shape)
-                    # To test bitrate, save image in J2K, check filesize of that, then delete the file again
-                    full_file_name = (
-                        TEMP_DIR + "/" + image_name + ".j2k"
-                    )  # DATA_DIR + "/" + fts_file[i] #J2K file
-                    jp2 = glymur.Jp2k(
-                        full_file_name, data=image_stretch[:, :, 0].astype(np.uint8)
-                    )  # set grayscale J2K
-                    jp2_x = (
-                        torch.from_numpy(jp2[:]).to(device).unsqueeze(0) / 65535
-                    )  # Similar setup to x
-                    j2k_recon_diff = (
-                        torch.mean((jp2_x - x).abs(), axis=1)
-                        .squeeze()
-                        .cpu()
-                        .detach()
-                        .numpy()
-                    )
-
-                    # Assume that the data is saved next to the header, so filesize is approximately the size of the file in bytes + size of image in bytes. Therefore, n_bits = 8*(filesize - headersize)
-                    n_bits_estimate = 8 * (os.stat(full_file_name).st_size)
-                    original_bits_per_pixel = np.nan
-                    if n_pixels > 0:
-                        original_bits_per_pixel = n_bits_estimate / n_pixels
-
-                    # fix.colorbar(im, ax=axes[0])
-                    # m.plot(norm=PowerNorm(0.5, vmin=0, vmax=1e-7, clip=True))
-                    im = axes[1].imshow(
-                        rec_net[:, :, 0]
-                    )  # Should be OK, just dark as the range is large
-                    axes[1].title.set_text(
-                        "Reconstructed with VQVAE \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
-                            compute_psnr(x, out_net["x_hat"]),
-                            compute_msssim(x, out_net["x_hat"]),
-                            compute_bpp(out_net),
+                        # comparison
+                        diff = (
+                            torch.mean((out_net["x_hat"] - x).abs(), axis=1)
+                            .squeeze()
+                            .cpu()
+                            .detach()
+                            .numpy()
                         )
-                    )
-                    # fix.colorbar(im, ax=axes[1])
-                    # Compute MSE
-                    mse = (
-                        torch.mean((out_net["x_hat"] - x) ** 2, axis=1)
-                        .squeeze()
-                        .cpu()
-                        .detach()
-                        .numpy()
-                        .mean()
-                    )
-                    im = axes[2].imshow(diff, cmap="viridis")
-                    axes[2].title.set_text("Difference - MSE: {:.6f}".format(mse))
-                    # fix.colorbar(im, ax=axes[2])
-                    # plot comparison of original, reconstructed and diff
 
-                    im = axes[3].imshow(jp2[:])  # Reconstructed in JP2 format
-                    x_red = x[:, 0, :, :].unsqueeze(0)
-                    jp2_x_inc = jp2_x.unsqueeze(0)
-                    axes[3].title.set_text(
-                        "Reconstructed From J2K \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
-                            compute_psnr(x, jp2_x),
-                            compute_msssim(x_red, jp2_x_inc),
-                            original_bits_per_pixel,
+                        fix, axes = plt.subplots(1, 5, figsize=(16, 12))
+                        for ax in axes:
+                            ax.axis("off")
+
+                        im = axes[0].imshow(
+                            image_np[:, :, 0]
+                        )  # Check the shape, should be the raw image
+                        # axes[0].imshow(image_pil)
+                        axes[0].title.set_text(
+                            "Original - CME present: {}".format(
+                                "Yes" if is_cme == 1 else "No"
+                            )
                         )
-                    )  # Need to modify x in mssim due to expected data shape
-                    # fix.colorbar(im, ax=axes[1])
-                    # Compute MSE For J2K
-                    mse_j2k = (
-                        torch.mean((jp2_x - x[:, 0, :, :]) ** 2, axis=1)
-                        .squeeze()
-                        .cpu()
-                        .detach()
-                        .numpy()
-                        .mean()
-                    )
-                    im = axes[4].imshow(j2k_recon_diff, cmap="viridis")
-                    axes[4].title.set_text(
-                        "Difference J2K - MSE: {:.6f}".format(mse_j2k)
-                    )
-                    # fix.colorbar(im, ax=axes[2])
-                    # plot comparison of original, reconstructed and diff
-                    compare_name = image_name + "_comparison.png"
-                    plotname = os.path.join(dir_, compare_name)
-                    plt.show()
-                    plt.savefig(plotname)
 
-                progress.update(task, advance=1)  # update progress bar
+                        # Estimate bits per pixel
+                        n_pixels = np.product(image_np[:, :, 0].shape)
+                        # To test bitrate, save image in J2K, check filesize of that, then delete the file again
+                        full_file_name = (
+                            TEMP_DIR + "/" + image_name + "_{:1f}.j2k".format(c)
+                        )  # DATA_DIR + "/" + fts_file[i] #J2K file
+                        # cratios : Tuple[int, ...], optional - Compression ratios for successive layers.
+                        jp2 = glymur.Jp2k(
+                            full_file_name,
+                            data=image_stretch[:, :, 0].astype(np.uint8),
+                            cratios=[c],
+                        )  # set grayscale J2K
+                        jp2_x = (
+                            torch.from_numpy(jp2[:]).to(device).unsqueeze(0) / 65535
+                        )  # Similar setup to x
+                        j2k_recon_diff = (
+                            torch.mean((jp2_x - x).abs(), axis=1)
+                            .squeeze()
+                            .cpu()
+                            .detach()
+                            .numpy()
+                        )
+
+                        # Assume that the data is saved next to the header, so filesize is approximately the size of the file in bytes + size of image in bytes. Therefore, n_bits = 8*(filesize - headersize)
+                        n_bits_estimate = 8 * (os.stat(full_file_name).st_size)
+                        original_bits_per_pixel = np.nan
+                        if n_pixels > 0:
+                            original_bits_per_pixel = n_bits_estimate / n_pixels
+
+                        # fix.colorbar(im, ax=axes[0])
+                        # m.plot(norm=PowerNorm(0.5, vmin=0, vmax=1e-7, clip=True))
+                        im = axes[1].imshow(
+                            rec_net[:, :, 0]
+                        )  # Should be OK, just dark as the range is large
+                        axes[1].title.set_text(
+                            "Reconstructed with VQVAE \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
+                                compute_psnr(x, out_net["x_hat"]),
+                                compute_msssim(x, out_net["x_hat"]),
+                                compute_bpp(out_net),
+                            )
+                        )
+                        # fix.colorbar(im, ax=axes[1])
+                        # Compute MSE
+                        mse = (
+                            torch.mean((out_net["x_hat"] - x) ** 2, axis=1)
+                            .squeeze()
+                            .cpu()
+                            .detach()
+                            .numpy()
+                            .mean()
+                        )
+                        im = axes[2].imshow(diff, cmap="viridis")
+                        axes[2].title.set_text("Difference - MSE: {:.6f}".format(mse))
+                        # fix.colorbar(im, ax=axes[2])
+                        # plot comparison of original, reconstructed and diff
+
+                        im = axes[3].imshow(jp2[:])  # Reconstructed in JP2 format
+                        x_red = x[:, 0, :, :].unsqueeze(0)
+                        jp2_x_inc = jp2_x.unsqueeze(0)
+                        axes[3].title.set_text(
+                            "Reconstructed From J2K@ compression ratio = {:.1f} \n PSNR: {:.2f} dB \n MS-SSIM: {:.4f} \n Bits per Pixel {:.3f}".format(
+                                c,
+                                compute_psnr(x, jp2_x),
+                                compute_msssim(x_red, jp2_x_inc),
+                                original_bits_per_pixel,
+                            )
+                        )  # Need to modify x in mssim due to expected data shape
+                        # fix.colorbar(im, ax=axes[1])
+                        # Compute MSE For J2K
+                        mse_j2k = (
+                            torch.mean((jp2_x - x[:, 0, :, :]) ** 2, axis=1)
+                            .squeeze()
+                            .cpu()
+                            .detach()
+                            .numpy()
+                            .mean()
+                        )
+                        im = axes[4].imshow(j2k_recon_diff, cmap="viridis")
+                        axes[4].title.set_text(
+                            "Difference J2K - MSE: {:.6f}".format(mse_j2k)
+                        )
+                        # fix.colorbar(im, ax=axes[2])
+                        # plot comparison of original, reconstructed and diff
+                        compare_name = (
+                            image_name + "_comparison_ratio_{:.1f}.png".format(c)
+                        )
+                        plotname = os.path.join(dir_, compare_name)
+                        plt.show()
+                        plt.savefig(plotname)
+
+                    progress.update(task, advance=1)  # update progress bar
 
     else:
         # load a fits image
