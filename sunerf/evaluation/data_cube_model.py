@@ -85,8 +85,82 @@ global_min_rho = np.asarray(densities).min()
 print(global_max_rho, global_min_rho)
 print(global_max_v, global_min_v)
 
-density_filenames = []
-velocity_filenames = []
+
+def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z_fil, alpha_expon, norm = "linear",fname_subtag = None):
+    cube_norm = (cube - global_min)/(global_max - global_min)
+    plt.close("all")
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection = "3d")
+    distance_from_sun = np.sqrt(x_fil**2 + y_fil**2 + z_fil**2)/250
+    sig_arg = cube_norm**alpha_expon + distance_from_sun
+    alpha = np.tanh(sig_arg) #Sigmoid
+    if(len(x_fil) and len(y_fil) and len(z_fil)):
+        ax.scatter(x_fil, y_fil, z_fil, c=cube, marker='.',norm=norm , vmin=global_min, vmax=global_max, alpha = alpha) #
+        if norm == "log":
+            ticks = np.linspace(np.log(global_min), np.log(global_max), 10, endpoint = True)
+        else:
+            ticks= np.linspace(global_min,global_max,10, endpoint = True)
+        cbar = plt.colorbar(ax.collections[0], ax=ax, ticks = ticks)
+        cbar.set_label('{}'.format(tag))
+    ax.set_xlim(-250,250)
+    ax.set_ylim(-250,250)
+    ax.set_zlim(-250,250)
+    ax.set_xlabel('X[ Solar Radii ]')
+    ax.set_ylabel('Y[ Solar Radii ]')
+    ax.set_zlabel('Z[ Solar Radii ]')
+    ax.set_title('3D Scatter Plot of points based on {} at timestep {}'.format(tag, idx))
+    
+    # Add Sun
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+    x_sun = distance_mask * np.outer(np.cos(u), np.sin(v))
+    y_sun = distance_mask * np.outer(np.sin(u), np.sin(v))
+    z_sun = distance_mask * np.outer(np.ones(np.size(u)), np.cos(v))
+
+    # Plot the Sun
+    
+    ax.plot_surface(x_sun, y_sun, z_sun, color='gold', alpha=0.5)
+
+    # Add Earth
+    radius_earth = 0.009157683 # Solar radii = 6371 km - its a dot.
+    x_earth = np.outer(np.cos(u), np.sin(v))*7# * radius_earth
+    y_earth = np.outer(np.sin(u), np.sin(v))*7# * radius_earth
+    z_earth = np.outer(np.ones(np.size(u)), np.cos(v))*7# * radius_earth
+
+    # Earth position defined on x axis, 1 AU = 215.032 Solar Radii
+    r_earth = 215.032
+    center_earth = (-r_earth, 0, 0)
+    # If center_earth = (-r_earth, 0, 0) then on a circle, this is at pi radians. If L5 is trailing, then L5 is at (r_earth*cos(2/3*np.pi), r_earth*sin(2/3*np.pi), 0)
+    center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
+
+    x_l5 = x_earth + center_l5[0]
+    y_l5 = x_earth + center_l5[1]
+    z_l5 = x_earth + center_l5[2]
+
+    x_earth += center_earth[0]
+    y_earth += center_earth[1]
+    z_earth += center_earth[2]
+
+    # Plot the Earth
+    ax.plot_surface(x_earth, y_earth, z_earth, color='cyan', alpha=1)
+    # Plot L5
+    ax.plot_surface(x_l5, y_l5, z_l5, color = "red", alpha = 1)
+
+
+    # Plot earth orbit
+    x_orbit = r_earth * np.cos(u)
+    y_orbit = r_earth * np.sin(u)
+    z_orbit = np.zeros_like(u)
+
+    ax.scatter(x_orbit, y_orbit, z_orbit, c='gray', marker='.', alpha = 0.1)
+
+    filename = os.path.join(video_path_dens, f'{tag}_cube_{idx:03d}.jpg')
+
+    if fname_subtag is not None:
+        filename = os.path.join(video_path_dens, f'{tag}_{fname_subtag}_cube_{idx:03d}.jpg')
+    fig.savefig(filename, dpi=100)
+    return filename
+    
 
 def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plot_threshold:float,  alpha_expon:float = 1.5, norm = "linear"):
     '''
@@ -97,6 +171,10 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
+    #ax = fig.add_subplot(121, projection='3d')  # Main 3D scatter plot
+    #ax_hist_x = fig.add_subplot(322)  # Histogram for x-axis
+    #ax_hist_y = fig.add_subplot(324)  # Histogram for y-axis
+    #ax_hist_z = fig.add_subplot(326)  # Histogram for z-axis
 
     # Only plot values above a threshold
     mask = cube > plot_threshold
@@ -147,6 +225,10 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     center_earth = (-r_earth, 0, 0)
     # If center_earth = (-r_earth, 0, 0) then on a circle, this is at pi radians. If L5 is trailing, then L5 is at (r_earth*cos(2/3*np.pi), r_earth*sin(2/3*np.pi), 0)
     center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
+    x_l5 = x_earth + center_l5[0]
+    y_l5 = x_earth + center_l5[1]
+    z_l5 = x_earth + center_l5[2]
+
     x_earth += center_earth[0]
     y_earth += center_earth[1]
     z_earth += center_earth[2]
@@ -154,9 +236,7 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     # Plot the Earth
     ax.plot_surface(x_earth, y_earth, z_earth, color='cyan', alpha=1)
     # Plot L5
-    x_l5 = x_earth + center_l5[0]
-    y_l5 = x_earth + center_l5[1]
-    z_l5 = x_earth + center_l5[2]
+    
     ax.plot_surface(x_l5, y_l5, z_l5, color = "red", alpha = 1)
 
 
@@ -166,15 +246,47 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     z_orbit = np.zeros_like(u)
 
     ax.scatter(x_orbit, y_orbit, z_orbit, c='gray', marker='.', alpha = 0.1)
+
+    # Histograms along each axis
+    #ax_hist_x.hist(x_filtered_again, bins=15, color='b', alpha=0.6)
+    #ax_hist_y.hist(y_filtered_again, bins=15, color='g', alpha=0.6)
+    #ax_hist_z.hist(z_filtered_again, bins=15, color='r', alpha=0.6)
+
+    # Set titles for histograms
+    #ax_hist_x.set_title('Histogram along X axis')
+    #ax_hist_y.set_title('Histogram along Y axis')
+    #ax_hist_z.set_title('Histogram along Z axis')
+
     filename = os.path.join(video_path_dens, f'{tag}_cube_{idx:03d}.jpg')
     fig.savefig(filename, dpi=100)
     return filename
     
     
-
+density_filenames = []
+velocity_filenames = []
+masked_density_filenames = []
+masked_velocity_filenames = []
 for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
-    density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = np.exp(0.5*np.log(global_max_rho)),  alpha_expon = 1.5, norm = "log")
-    velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = 8.0,  alpha_expon = 1.5)
+    density_threshold = 1e26
+    velocity_threshold = 8.0
+
+    density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = density_threshold,  alpha_expon = 1.5, norm = "log")
+    velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = velocity_threshold,  alpha_expon = 1.5)
+    
+    density_mask = rho > density_threshold
+    velocity_mask = abs_v > velocity_threshold
+    mask = density_mask & velocity_mask   #
+    # Positions that belong only to outliers
+    x_filtered_again = x_filtered[mask]
+    y_filtered_again = y_filtered[mask]
+    z_filtered_again = z_filtered[mask]
+    # Values that belong only to outliers
+    masked_rho = rho[mask]
+    masked_v = abs_v[mask]
+    masked_density_fname = plot_datacube_directly(masked_rho,global_min_rho, global_max_rho, tag = "density",x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 1.5, norm = "log", fname_subtag = "masked")
+    masked_velocity_fname = plot_datacube_directly(masked_v,global_min_v, global_max_v, tag = "velocity", x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 1.5, fname_subtag = "masked")
+    masked_density_filenames.append(masked_density_fname)
+    masked_velocity_filenames.append(masked_velocity_fname)
     density_filenames.append(density_filename)
     velocity_filenames.append(velocity_filename)
 
@@ -188,5 +300,15 @@ if len(density_filenames):
 if len(velocity_filenames):
     with imageio.get_writer(os.path.join(video_path_dens,'velocity.gif'), mode='I', duration=frame_duration) as writer:
         for filename in velocity_filenames:
+            image = imageio.v3.imread(filename)
+            writer.append_data(image)
+if len(masked_velocity_filenames):
+    with imageio.get_writer(os.path.join(video_path_dens,'masked_velocity.gif'), mode='I', duration=frame_duration) as writer:
+        for filename in masked_velocity_filenames:
+            image = imageio.v3.imread(filename)
+            writer.append_data(image)
+if len(masked_density_filenames):
+    with imageio.get_writer(os.path.join(video_path_dens,'masked_density.gif'), mode='I', duration=frame_duration) as writer:
+        for filename in masked_density_filenames:
             image = imageio.v3.imread(filename)
             writer.append_data(image)
