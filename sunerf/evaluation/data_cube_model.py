@@ -14,6 +14,8 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import imageio #gifs
 
+
+
 base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 
 chk_path = os.path.join(base_path, 'save_state.snf')
@@ -25,9 +27,11 @@ os.makedirs(video_path_dens, exist_ok=True)
 n_cubes = 70 # How many cubes to generate
 
 # Points in R_solar
-x = np.linspace(-250,250,32)
-y = np.linspace(-250,250,32)
-z = np.linspace(-250,250,32)
+num_points = 16
+
+x = np.linspace(-250,250,num_points)
+y = np.linspace(-250,250,num_points)
+z = np.linspace(-250,250,num_points)
 
 xx,yy,zz = np.meshgrid(x,y,z,indexing = "ij")
 solar_center = np.array([0,0,0])
@@ -79,37 +83,48 @@ global_min_v = np.asarray(speeds).min()
 global_max_rho = np.asarray(densities).max()
 global_min_rho = np.asarray(densities).min()
 print(global_max_rho, global_min_rho)
+print(global_max_v, global_min_v)
 
 density_filenames = []
 velocity_filenames = []
 
-for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
-    rho_norm = (rho - global_min_rho)/(global_max_rho - global_min_rho + 1e-20)
-    norm_mag = (abs_v-global_min_v)/(global_max_v-global_min_v)
+def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plot_threshold:float,  alpha_expon:float = 1.5, norm = "linear"):
+    '''
+        Function plotting the datacube, the Sun, Earth and L5, alongside Earths orbit
+    '''
+    cube_norm = (cube - global_min)/(global_max - global_min)
     plt.close("all")
     
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(x_filtered, y_filtered, z_filtered, c=rho, marker='.',norm='log', alpha = rho_norm, vmin=2e24, vmax=8e28)
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('3D Scatter Plot of points based on density')
-    cbar = plt.colorbar(ax.collections[0], ax=ax)
-    cbar.set_label('n_e')
-    #plt.show()
-    fig.savefig(os.path.join(video_path_dens, f'density_cube_{i:03d}.jpg'), dpi=100)
-    density_filenames.append(os.path.join(video_path_dens, f'density_cube_{i:03d}.jpg'))
+
+    # Only plot values above a threshold
+    mask = cube > plot_threshold
+
+    x_filtered_again = x_filtered[mask]
+    y_filtered_again = y_filtered[mask]
+    z_filtered_again = z_filtered[mask]
     
-    # Plot velocity
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    # Only plot pixels above certain velocity/Density
-    ax.scatter(x_filtered, y_filtered, z_filtered, c=norm_mag, cmap = "inferno", alpha = norm_mag**1.5, marker='.') # norm_mag exponentiated for alpha channel
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('3D Scatter Plot of points based on speed')
+    cube = cube[mask]
+    cube_norm = cube_norm[mask]
+
+    distance_from_sun = np.sqrt(x_filtered_again**2 + y_filtered_again**2 + z_filtered_again**2)/250
+    sig_arg = cube_norm**alpha_expon + distance_from_sun
+    alpha = np.tanh(sig_arg) #Sigmoid
+    ax.scatter(x_filtered_again, y_filtered_again, z_filtered_again, c=cube, marker='.',norm=norm , vmin=global_min, vmax=global_max, alpha = alpha) #
+    ax.set_xlim(-250,250)
+    ax.set_ylim(-250,250)
+    ax.set_zlim(-250,250)
+    ax.set_xlabel('X[ Solar Radii ]')
+    ax.set_ylabel('Y[ Solar Radii ]')
+    ax.set_zlabel('Z[ Solar Radii ]')
+    ax.set_title('3D Scatter Plot of points based on {} at timestep {}'.format(tag, idx))
+    if norm == "log":
+        ticks = np.linspace(np.log(global_min), np.log(global_max), 10, endpoint = True)
+    else:
+        ticks= np.linspace(global_min,global_max,10, endpoint = True)
+    cbar = plt.colorbar(ax.collections[0], ax=ax, ticks = ticks)
+    cbar.set_label('{}'.format(tag))
     # Add Sun
     u = np.linspace(0, 2 * np.pi, 100)
     v = np.linspace(0, np.pi, 100)
@@ -123,9 +138,9 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
 
     # Add Earth
     radius_earth = 0.009157683 # Solar radii = 6371 km - its a dot.
-    x_earth = np.outer(np.cos(u), np.sin(v))*3# * radius_earth
-    y_earth = np.outer(np.sin(u), np.sin(v))*3# * radius_earth
-    z_earth = np.outer(np.ones(np.size(u)), np.cos(v))*3# * radius_earth
+    x_earth = np.outer(np.cos(u), np.sin(v))*7# * radius_earth
+    y_earth = np.outer(np.sin(u), np.sin(v))*7# * radius_earth
+    z_earth = np.outer(np.ones(np.size(u)), np.cos(v))*7# * radius_earth
 
     # Earth position defined on x axis, 1 AU = 215.032 Solar Radii
     r_earth = 215.032
@@ -137,12 +152,12 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     z_earth += center_earth[2]
 
     # Plot the Earth
-    ax.plot_surface(x_earth, y_earth, z_earth, color='lightblue', alpha=1)
+    ax.plot_surface(x_earth, y_earth, z_earth, color='cyan', alpha=1)
     # Plot L5
     x_l5 = x_earth + center_l5[0]
     y_l5 = x_earth + center_l5[1]
     z_l5 = x_earth + center_l5[2]
-    ax.plot_surface(x_l5, y_l5, z_l5, color = "lightslategray", alpha = 1)
+    ax.plot_surface(x_l5, y_l5, z_l5, color = "red", alpha = 1)
 
 
     # Plot earth orbit
@@ -151,15 +166,17 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     z_orbit = np.zeros_like(u)
 
     ax.scatter(x_orbit, y_orbit, z_orbit, c='gray', marker='.', alpha = 0.1)
+    filename = os.path.join(video_path_dens, f'{tag}_cube_{idx:03d}.jpg')
+    fig.savefig(filename, dpi=100)
+    return filename
+    
+    
 
-
-    cbar = plt.colorbar(ax.collections[0], ax=ax)
-    cbar.set_label('|v|')
-
-
-    #plt.show()
-    fig.savefig(os.path.join(video_path_dens, f'velocity_cube_{i:03d}.jpg'), dpi=100)
-    velocity_filenames.append(os.path.join(video_path_dens, f'velocity_cube_{i:03d}.jpg'))
+for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
+    density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = np.exp(0.5*np.log(global_max_rho)),  alpha_expon = 1.5, norm = "log")
+    velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = 8.0,  alpha_expon = 1.5)
+    density_filenames.append(density_filename)
+    velocity_filenames.append(velocity_filename)
 
 
 frame_duration = 0.5 #2fps
