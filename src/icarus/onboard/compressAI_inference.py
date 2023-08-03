@@ -109,7 +109,7 @@ if __name__ == "__main__":
         fits_module.setup("Testing")
         fits_loader = fits_module.val_dataloader()
 
-        compression_ratios = np.linspace(0, 1, 11)
+        compression_ratios = np.linspace(0, 100, 11)
 
         with Progress() as progress:
             task = progress.add_task("Batch Visualization", total=len(fits_loader))
