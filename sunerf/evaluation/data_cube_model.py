@@ -12,7 +12,9 @@ import cv2
 
 from mpl_toolkits.mplot3d import Axes3D
 
-base_path = '/mnt/training/HAO_pinn_2view'#'/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+import imageio #gifs
+
+base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_cube')
@@ -77,6 +79,9 @@ global_max_rho = np.asarray(densities).max()
 global_min_rho = np.asarray(densities).min()
 print(global_max_rho, global_min_rho)
 
+density_filenames = []
+velocity_filenames = []
+
 for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     #rho_norm = (rho - global_min_rho)/(global_max_rho - global_min_rho + 1e-20)
     norm_mag = (abs_v-global_min_v)/(global_max_v-global_min_v)
@@ -93,11 +98,12 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     cbar.set_label('n_e')
     #plt.show()
     fig.savefig(os.path.join(video_path_dens, f'density_cube_{i:03d}.jpg'), dpi=100)
+    density_filenames.append(os.path.join(video_path_dens, f'density_cube_{i:03d}.jpg'))
     '''
     # Plot velocity
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(x_filtered, y_filtered, z_filtered, c=norm_mag, cmap = "inferno", alpha = norm_mag**2, marker='.') # norm_mag exponentiated for alpha channel
+    ax.scatter(x_filtered, y_filtered, z_filtered, c=norm_mag, cmap = "inferno", alpha = norm_mag**1.5, marker='.') # norm_mag exponentiated for alpha channel
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
@@ -114,9 +120,9 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
 
     # Add Earth
     radius_earth = 0.009157683 # Solar radii = 6371 km - its a dot.
-    x_earth = np.outer(np.cos(u), np.sin(v))# * radius_earth
-    y_earth = np.outer(np.sin(u), np.sin(v))# * radius_earth
-    z_earth = np.outer(np.ones(np.size(u)), np.cos(v))# * radius_earth
+    x_earth = np.outer(np.cos(u), np.sin(v))*3# * radius_earth
+    y_earth = np.outer(np.sin(u), np.sin(v))*3# * radius_earth
+    z_earth = np.outer(np.ones(np.size(u)), np.cos(v))*3# * radius_earth
 
     # Earth position defined on x axis, 1 AU = 215.032 Solar Radii
     r_earth = 215.032
@@ -128,12 +134,12 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     z_earth += center_earth[2]
 
     # Plot the Earth
-    ax.plot_surface(x_earth, y_earth, z_earth, color='lightblue', alpha=0.9)
+    ax.plot_surface(x_earth, y_earth, z_earth, color='lightblue', alpha=1)
     # Plot L5
     x_l5 = x_earth + center_l5[0]
     y_l5 = x_earth + center_l5[1]
     z_l5 = x_earth + center_l5[2]
-    ax.plot_surface(x_l5, y_l5, z_l5, color = "lightslategray", alpha = 0.9)
+    ax.plot_surface(x_l5, y_l5, z_l5, color = "lightslategray", alpha = 1)
 
 
     # Plot earth orbit
@@ -141,7 +147,7 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     y_orbit = r_earth * np.sin(u)
     z_orbit = np.zeros_like(u)
 
-    ax.scatter(x_orbit, y_orbit, z_orbit, c='gray', marker='.', alpha = 0.3)
+    ax.scatter(x_orbit, y_orbit, z_orbit, c='gray', marker='.', alpha = 0.1)
 
 
     cbar = plt.colorbar(ax.collections[0], ax=ax)
@@ -150,4 +156,17 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
 
     #plt.show()
     fig.savefig(os.path.join(video_path_dens, f'velocity_cube_{i:03d}.jpg'), dpi=100)
-    
+    velocity_filenames.append(os.path.join(video_path_dens, f'velocity_cube_{i:03d}.jpg'))
+
+
+frame_duration = 0.5 #2fps
+if len(density_filenames):
+    with imageio.get_writer(os.path.join(video_path_dens,'density.gif'), mode='I', duration=frame_duration) as writer:
+        for filename in density_filenames:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+if len(velocity_filenames):
+    with imageio.get_writer(os.path.join(video_path_dens,'velocity.gif'), mode='I', duration=frame_duration) as writer:
+        for filename in velocity_filenames:
+            image = imageio.imread(filename)
+            writer.append_data(image)
