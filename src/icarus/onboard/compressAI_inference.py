@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 cwd = os.getcwd()
 data_path = cwd
 config_path = os.path.join(cwd, "..", "..", "..", "config")
-with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+with open(os.path.join(config_path, "onboard_old.yaml"), "r") as f:
     data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
 
 ICARUS_DIR = dirname(dirname(__file__))
@@ -42,7 +42,7 @@ DATA_DIR = os.path.join(
     data_path, "data", "cor2"
 )  # moved "data" directory to /mnt/onboard_data/data/data
 TEMP_DIR = os.path.join(PLOT_DIR, "temp")
-one_image_test = False
+one_image_test = True
 """
 The following script runs a pre-trained compression model on a secchi fits file
 by following: https://github.com/InterDigitalInc/CompressAI/blob/master/examples/CompressAI%20Inference%20Demo.ipynb

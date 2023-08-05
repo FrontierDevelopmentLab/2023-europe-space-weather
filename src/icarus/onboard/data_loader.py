@@ -104,7 +104,7 @@ class FitsDataModule(LightningDataModule):
         cwd = os.getcwd()
         config_path = os.path.join(cwd, "..", "..", "..", "config")
         data_path = os.getcwd()
-        with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
+        with open(os.path.join(config_path, "onboard_old.yaml"), "r") as f:
             data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
         self.cor1_data_dir = hparams.get(
             "Data Directory Cor1", os.path.join(data_path, "data", "cor1")
