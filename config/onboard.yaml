@@ -1,8 +1,8 @@
 data_loader:
   data_dir: /mnt/onboard_data/training_data/v1
   input_fnames_list : /mnt/onboard_data/training_data/fnames_test100.csv
-  batch_size: 4
-  num_workers: 4
+  batch_size: 1
+  num_workers: 1
   img_size: 2048
 
   train_pct: 0.85
@@ -12,13 +12,13 @@ train:
    run_id: 20230802_debug1 # if missing auto generates unique
 
    run_dir: /mnt/training/
-   log_dir: /mnt/training/<run_id>/logs/
+   log_dir: /mnt/training/<run_id>/
    ckpt_dir: /mnt/training/<run_id>/checkpoints/
    out_dir: /mnt/training/<run_id>/
 
-   wandb_mode: offline # online or offline or disabled
+   wandb_mode: online # online or offline or disabled
 
-   resume_from_checkpoint: True
+   resume_from_checkpoint: False
    ckpt_path: last # path or "last"
 
    model: bmshj2018_factorized
@@ -27,4 +27,5 @@ train:
    learning_rate_schedule_patience: 10
    loss: mssim  # mssim or mse or rmse_sw or psnr
    nepochs: 100
-   log_every_n_steps: 10
+   log_every_n_steps: 1
+   log_ckpt_every_n_steps: 1 # 10

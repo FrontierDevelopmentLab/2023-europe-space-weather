@@ -1,0 +1,3 @@
+drive_locations:
+  datapath: /mnt/onboard_data
+  plotpath: /mnt/onboard_data/Plots

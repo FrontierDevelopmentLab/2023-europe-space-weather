@@ -72,7 +72,7 @@ class FitsDataModule(LightningDataModule):
             val_dataloader() -> Dataloader: Returns the validation dataloader
     """
 
-    def __init__(self, config):  #: dict = None):
+    def __init__(self, config: dict = None):
         """__init__
 
         Args:
@@ -91,20 +91,20 @@ class FitsDataModule(LightningDataModule):
         super().__init__()
         logging.info("Load data")
 
-        print(type(config))
-
         # TODO note previous data_loader also loaded cme label
 
         self.config = config
 
-        self.train_pct = config.train_pct
-        self.valid_pct = config.valid_pct
+        self.train_pct = config["train_pct"]
+        self.valid_pct = config["valid_pct"]
         self.test_pct = 1 - (self.train_pct + self.valid_pct)
         if (self.train_pct + self.valid_pct + self.test_pct) != 1:
             print("Percentages do not add to 1!")
 
+        self.num_workers = config["num_workers"]
+
         # need to ensure all images have the same resolution
-        self.required_shape = (config.img_size, config.img_size)
+        self.required_shape = (config["img_size"], config["img_size"])
 
         # TODO instead of resize check/discard images with incorrect resolution
         self.image_transforms = transforms.Compose(
@@ -116,14 +116,18 @@ class FitsDataModule(LightningDataModule):
         )
 
     def _get_filelist(self):
-        files = pd.read_csv(self.config.input_fnames_list)["0"].values
+        files = pd.read_csv(self.config["input_fnames_list"])["0"].values
         return files
 
-    def setup(self):
+    def setup(self, stage: str):
         """setup
         Method setting up the internals of the system
         including loading the relevant data (filenames) - Files have to be loaded in at runtime of the dataloader
         Dataloaders are created at the end of the method
+
+        Args:
+            stage (str): Stage for the data, encapsulating what this configuration is for - Example: Training, Testing, Validation
+                         required by pytorch lightning
         """
 
         fnames = self._get_filelist()
@@ -144,25 +148,25 @@ class FitsDataModule(LightningDataModule):
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_data,
-            batch_size=self.config.batch_size,
+            batch_size=self.config["batch_size"],
             shuffle=True,
-            num_workers=self.config.num_workers,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self, num_workers=None) -> DataLoader:
         num_workers = num_workers or self.num_workers
         return DataLoader(
             self.test_data,
-            batch_size=self.config.batch_size,
+            batch_size=self.config["batch_size"],
             shuffle=False,
-            num_workers=self.config.num_workers,
+            num_workers=num_workers,
         )
 
     def test_dataloader(self, num_workers=None) -> DataLoader:
         num_workers = num_workers or self.num_workers
         return DataLoader(
             self.val_data,
-            batch_size=self.config.batch_size,
+            batch_size=self.config["batch_size"],
             shuffle=True,
-            num_workers=self.config.num_workers,
+            num_workers=num_workers,
         )

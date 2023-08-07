@@ -36,6 +36,7 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
 )
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
+from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.pytorch.tuner.tuning import Tuner
 
 
@@ -46,6 +47,7 @@ class NCompressor(LightningModule):
         loss="mse",
         learning_rate=1e-4,
         learning_rate_schedule_patience=10,
+        batch_size=4,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -59,7 +61,7 @@ class NCompressor(LightningModule):
         elif self.hparams.loss == "mse":
             self.loss = (
                 torchmetrics.MeanSquaredError()
-            )  # TODO maybe this needs to be flattened?
+            )  # TODO maybe this needs to be flattened, not usable next?
         elif self.hparams.loss == "rmse_sw":
             self.loss = torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow()
         elif self.hparams.loss == "psnr":
@@ -67,23 +69,32 @@ class NCompressor(LightningModule):
         else:
             print(self.hparams.loss, "loss not implemented")
 
-        self.metric = [
-            torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure(),
-            torchmetrics.image.PeakSignalNoiseRatio(),
-            torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow(),
-        ]
+        # self.metric = [
+        #     torchmetrics.image.MultiScaleStructuralSimilarityIndexMeasure(),
+        #     torchmetrics.image.PeakSignalNoiseRatio(),
+        #     torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow(),
+        # ]
+        self.metric = torchmetrics.image.PeakSignalNoiseRatio()
+
+        self.batch_size = batch_size
 
     def forward(self, x):
         return self.model.forward(x)
 
     def training_step(self, batch, batch_idx):
-        images, event_index, fts_file = batch
+        images, fts_file = batch
         x = images / 65535  # TODO: add this to dataloader
         x_hat = self.forward(x)["x_hat"]
-        loss = -self.loss(x_hat, x)
+        loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 
-        if batch_idx % 10 == 0:
-            self.log("train/loss", loss, prog_bar=True)
+        # if batch_idx % 10 == 0:
+        self.log(
+            "train/loss",
+            loss,
+            prog_bar=True,
+            sync_dist=True,
+            batch_size=self.batch_size,
+        )
 
         return loss
 
@@ -92,15 +103,19 @@ class NCompressor(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         self.model.eval()
-        images, event_index, fts_file = batch
+        images, fts_file = batch
         x = images / 65535  # TODO: add this to dataloader
         x_hat = self.model(x)["x_hat"]
         loss = -self.loss(x_hat, x)
 
+        # for i in range(len(self.metric)):
+        #     self.metric[i].update(x_hat, x)
         self.metric.update(x_hat, x)
 
-        if batch_idx % 10 == 0:
-            self.log("val/loss", loss, prog_bar=True)
+        # if batch_idx % 10 == 0:
+        self.log(
+            "val/loss", loss, prog_bar=True, sync_dist=True, batch_size=self.batch_size
+        )
 
         if batch_idx == self.validation_batch_index:
             if wandb.run:
@@ -121,7 +136,6 @@ class NCompressor(LightningModule):
                                 caption="Difference",
                             ),
                         ],
-                        "labels": event_index[0],
                     }
                 )
 
@@ -130,8 +144,14 @@ class NCompressor(LightningModule):
     def on_validation_epoch_end(self):
         # metric = self.metric.compute()
         # self.log("PSNR:", metric)
-        metrics = self.metric.compute()
-        self.log({"SSIM": metrics[0], "PSNR": metrics[1], "RMSE_SW": metrics[2]})
+        # metrics = []
+        # for i in range(len(self.metric)):
+        #     metrics.append(self.metric[i].compute())
+        # self.log({"SSIM": metrics[0], "PSNR": metrics[1], "RMSE_SW": metrics[2]})
+        metric = self.metric.compute()
+        self.log(
+            "PSNR:", metric, sync_dist=True, batch_size=self.batch_size
+        )  # not wandb.log- I don't think it can take a dict
 
     def configure_optimizers(self):
         from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -200,67 +220,69 @@ if __name__ == "__main__":
         entity="ssa_live_twin",
         config=config,
         mode=config["train"]["wandb_mode"],
+        name=config["train"]["run_id"],
     )
     wandb_logger = WandbLogger()
 
     # torch.set_float32_matmul_precision('medium' | 'high')
-    print(wandb.config)
-    print(wandb.config.train)
-    print(wandb.config.train["ckpt_dir"])
-    print(wandb.config.train.ckpt_dir)
 
     # save best and last model
     checkpoint_callback = ModelCheckpoint(
-        dirpath=wandb.config.train.ckpt_dir,
+        dirpath=wandb.config.train["ckpt_dir"],
         monitor="val/loss",
         mode="min",
         auto_insert_metric_name=True,
         save_top_k=1,
         save_last=True,
         verbose=True,
-        every_n_train_steps=wandb.config.train.log_every_n_steps,
+        every_n_train_steps=wandb.config.train["log_ckpt_every_n_steps"],
     )
 
     # save_callback = LambdaCallback(on_validation_end=lambda *args: save_state(sunerf, data_module, save_path))
 
-    csv_logger = CSVLogger(save_dir=wandb.config.train.log_dir, name="logs")
+    csv_logger = CSVLogger(save_dir=wandb.config.train["log_dir"], name="logs")
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     model = NCompressor(
-        quality=wandb.config.train.quality,
-        loss=wandb.config.train.loss,
-        learning_rate=wandb.config.train.learning_rate,
-        learning_rate_schedule_patience=wandb.config.train.learning_rate_schedule_patience,
+        quality=wandb.config.train["quality"],
+        loss=wandb.config.train["loss"],
+        learning_rate=wandb.config.train["learning_rate"],
+        learning_rate_schedule_patience=wandb.config.train[
+            "learning_rate_schedule_patience"
+        ],
+        batch_size=wandb.config.data_loader["batch_size"],
     )
 
     # get checkpoint path if resume training from previous model
     # TODO make into a function
-    if wandb.config.train.resume_from_checkpoint:
-        if wandb.config.train.ckpt_path == "last":
-            ckpt_path = os.path.join(wandb.config.train.ckpt_dir, "last.ckpt")
+    if wandb.config.train["resume_from_checkpoint"]:
+        if wandb.config.train["ckpt_path"] == "last":
+            ckpt_path = os.path.join(wandb.config.train["ckpt_dir"], "last.ckpt")
         else:
-            ckpt_path = wandb.config.train.ckpt_path
+            ckpt_path = wandb.config.train["ckpt_path"]
         logging.info(f"Load checkpoint: {ckpt_path}")
         # model.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu'))['state_dict'])
     else:
         ckpt_path = None
 
-    # TODO: just take from config not everything
     dm = FitsDataModule(wandb.config.data_loader)
 
     trainer = Trainer(
-        max_epochs=wandb.config.train.nepochs,
+        max_epochs=wandb.config.train["nepochs"],
         accelerator="auto",
         callbacks=[lr_monitor, checkpoint_callback],
         logger=[csv_logger, wandb_logger],
+        # devices=1,
+        strategy=DDPStrategy(find_unused_parameters=True),
+        log_every_n_steps=wandb.config.train["log_every_n_steps"],
     )
 
     logging.info("Start model training")
     trainer.fit(model, datamodule=dm, ckpt_path=ckpt_path)
     trainer.test(model, datamodule=dm)
 
-    trainer.save_checkpoint(os.path.join(wandb.config.train.ckpt_dir, "final.ckpt"))
+    trainer.save_checkpoint(os.path.join(wandb.config.train["ckpt_dir"], "final.ckpt"))
 
     # TODO save best and last to separate dir?
     # out_dir = config["train"]["out_dir"]
