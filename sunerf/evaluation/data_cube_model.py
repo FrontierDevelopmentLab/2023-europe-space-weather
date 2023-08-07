@@ -13,10 +13,11 @@ import cv2
 from mpl_toolkits.mplot3d import Axes3D
 
 import imageio #gifs
+import logging
 
 
 
-base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+base_path = '/mnt/training/HAO_pinn_2view'
 
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_cube')
@@ -36,12 +37,18 @@ z = np.linspace(-250,250,num_points)
 xx,yy,zz = np.meshgrid(x,y,z,indexing = "ij")
 solar_center = np.array([0,0,0])
 distance = np.sqrt((xx - solar_center[0])**2 + (yy - solar_center[1])**2 + (zz - solar_center[2])**2)
-distance_mask = 21 #Cut out 21 solar radii as per rest of the program
+#Cut out inner solar radii as per rest of the program
+distance_mask = 21
+logging.info("Masking inner {} Solar Radii.".format(distance_mask))
 outside_sphere_mask = distance > distance_mask
 x_filtered = xx[outside_sphere_mask]
 y_filtered = yy[outside_sphere_mask]
 z_filtered = zz[outside_sphere_mask]
 
+
+density_threshold = 5e23
+velocity_threshold = 1.0 #Most CMEs appear to be moving with a velocity of 3.
+logging.info("Thresholding density at {} grams m^{-3}, velocity at {} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
 densities = [] #1d - Generates Density at each point in each cube
 velocities = [] #3d - 3 Velocity at each point in each cube
 speeds = [] #1d - Speed at each point in each cube
@@ -267,8 +274,7 @@ velocity_filenames = []
 masked_density_filenames = []
 masked_velocity_filenames = []
 for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
-    density_threshold = 1e26
-    velocity_threshold = 8.0
+    
 
     density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = density_threshold,  alpha_expon = 1.5, norm = "log")
     velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = velocity_threshold,  alpha_expon = 1.5)
