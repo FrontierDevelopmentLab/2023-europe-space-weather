@@ -11,9 +11,12 @@ import pickle
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
-START_STEPNUM = 5
-END_STEPNUM = 5  # 74
+START_STEPNUM = 37  # 5
+END_STEPNUM = 37  # 74
 CHUNKS = 4
+
+R_SUN_CM = 6.957e+10
+GRID_SIZE = 500 / 16  # solar radii
 
 def save_stepnum_to_datetime():
     stepnum_to_datetime = dict()
@@ -40,6 +43,7 @@ def dtstr_to_datetime(dtstr):
     return datetime.strptime(dtstr, "%Y-%m-%d %H:%M:%S")
 stepnum_to_datetime = dict(map(lambda kv: (kv[0], dtstr_to_datetime(kv[1])), stepnum_to_datetime.items()))
 
+mse_all_stepnums = []
 
 for stepnum in range(START_STEPNUM, END_STEPNUM + 1, 1):
 
@@ -84,10 +88,21 @@ for stepnum in range(START_STEPNUM, END_STEPNUM + 1, 1):
         density = density.view(query_points_npy.shape[:3]).cpu().detach().numpy()
         density_chunks.append(density)
 
-    density = np.concatenate(density_chunks, 1)
+    density = np.concatenate(density_chunks, 1)  # in electrons / r_sun
+    # convert unit to that of ground truth: electrons / cm^3
+    # density *= GRID_SIZE # electrons / grid cell
+    # density *= (GRID_SIZE * R_SUN_CM) ** (-3)  # electrons / cm^3
+    # density *= GRID_SIZE ** (-2) * R_SUN_CM ** (-3)
 
     # compare density to ground truth
-    print(density[0])
-    print(density_gt[0])
-    mse = ((density - density_gt)**2).mean(axis=None)
+    rel_density = density / np.sum(density)
+    rel_density_gt = density_gt / np.sum(density_gt)
+
+    print(rel_density[0])
+    print(rel_density_gt[0])
+    mse = ((rel_density - rel_density_gt)**2).mean(axis=None)
     print(mse)
+
+    mse_all_stepnums.append(mse)
+
+print(sum(mse_all_stepnums) / len(mse_all_stepnums))
