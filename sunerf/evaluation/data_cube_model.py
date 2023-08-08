@@ -10,17 +10,28 @@ from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 import cv2
 
+from tvtk.api import tvtk, write_data
+
 from mpl_toolkits.mplot3d import Axes3D
 
 import imageio #gifs
 import logging
+import sys
+
+from scipy.spatial import ConvexHull #ConvexHull used to note the simplexes - This allows for 3D visualization of the structure!
+
+#import vtk
+import tvtk
+
+#logging.getLogger().addHandler(logging.StreamHandler(sys.stdout)) # Output to console.
 
 
-
-base_path = '/mnt/training/HAO_pinn_2view'
+base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_cube')
+
+
 
 # init loader
 loader = SuNeRFLoader(chk_path, resolution=512)
@@ -39,16 +50,16 @@ solar_center = np.array([0,0,0])
 distance = np.sqrt((xx - solar_center[0])**2 + (yy - solar_center[1])**2 + (zz - solar_center[2])**2)
 #Cut out inner solar radii as per rest of the program
 distance_mask = 21
-logging.info("Masking inner {} Solar Radii.".format(distance_mask))
-outside_sphere_mask = distance > distance_mask
-x_filtered = xx[outside_sphere_mask]
-y_filtered = yy[outside_sphere_mask]
-z_filtered = zz[outside_sphere_mask]
+maximum_distance = 216 # Solar Radii - 1AU = ~215 S_/odot, so this means we restrict to 1AU
+print("Masking inner {} Solar Radii, as well as anything beyond {} Solar Radii.".format(distance_mask, maximum_distance))
+outside_sun_mask = distance > distance_mask
+inside_earth_orbit_mask = distance < maximum_distance
+x_filtered = xx[outside_sun_mask & inside_earth_orbit_mask]
+y_filtered = yy[outside_sun_mask & inside_earth_orbit_mask]
+z_filtered = zz[outside_sun_mask & inside_earth_orbit_mask]
 
-
-density_threshold = 5e23
-velocity_threshold = 1.0 #Most CMEs appear to be moving with a velocity of 3.
-logging.info("Thresholding density at {} grams m^{-3}, velocity at {} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
+percentile = 95 # Use this percentile for masking
+percentile = np.clip(percentile, 0, 100)
 densities = [] #1d - Generates Density at each point in each cube
 velocities = [] #3d - 3 Velocity at each point in each cube
 speeds = [] #1d - Speed at each point in each cube
@@ -78,8 +89,6 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
     # velocity = velocity / 10
     mag = np.sqrt(velocity[...,0]**2+velocity[...,1]**2+velocity[...,2]**2)
 
-
-
     densities.append(density)
     velocities.append(velocity)
     speeds.append(mag)
@@ -89,8 +98,18 @@ global_max_v = np.asarray(speeds).max()
 global_min_v = np.asarray(speeds).min()
 global_max_rho = np.asarray(densities).max()
 global_min_rho = np.asarray(densities).min()
-print(global_max_rho, global_min_rho)
-print(global_max_v, global_min_v)
+
+mean_density = np.asarray(densities).mean()
+mean_velocity = np.asarray(speeds).mean()
+
+perc_dens = np.percentile(np.asarray(densities),percentile)
+perc_speed = np.percentile(np.asarray(speeds),percentile)
+print("Mean Density: {} g per cm^3 \n {}% Percentile:{} g per cm^3 \n Max Density: {} g per cm^3 \n Min Density: {:.3f} g per cm^3.".format(mean_density,percentile, perc_dens,global_max_rho, global_min_rho))
+print("Mean Velocity: {:.3f} Solar Radii per 2 days \n {}% Percentile:{:.3f} Solar Radii per 2 days \n Max Velocity: {:.3f} Solar Radii per 2 days \n Min Velocity: {:.3f} Solar Radii per 2 days.".format(mean_velocity,percentile,perc_speed,global_max_v, global_min_v))
+# Choose thresholds on some percentile
+density_threshold = perc_dens
+velocity_threshold = perc_speed #Most CMEs appear to be moving with a velocity of 3
+print("Thresholding density at {} grams per cm^3, velocity at {:.3f} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
 
 
 def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z_fil, alpha_expon, norm = "linear",fname_subtag = None):
@@ -273,15 +292,28 @@ density_filenames = []
 velocity_filenames = []
 masked_density_filenames = []
 masked_velocity_filenames = []
-for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
-    
 
-    density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = density_threshold,  alpha_expon = 1.5, norm = "log")
-    velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = velocity_threshold,  alpha_expon = 1.5)
+masked_density = []
+masked_velocity = []
+
+last_mask = None
+mean_velocity = []
+
+for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
+    density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = density_threshold,  alpha_expon = 3, norm = "log")
+    velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = velocity_threshold,  alpha_expon = 3)
     
     density_mask = rho > density_threshold
     velocity_mask = abs_v > velocity_threshold
     mask = density_mask & velocity_mask   #
+    if last_mask is not None:
+        # Last mask needs to be blurred - we want to remove voxels around the currently active points, as well as the points themselves
+        # last_mask exists, therefore we take out the background
+        last_mask = ~last_mask 
+        #Every spot that has been accepted last time is now disabled
+        # every new spot is still possible - achieving recent background subtraction
+        mask = mask & last_mask
+        
     # Positions that belong only to outliers
     x_filtered_again = x_filtered[mask]
     y_filtered_again = y_filtered[mask]
@@ -289,12 +321,20 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     # Values that belong only to outliers
     masked_rho = rho[mask]
     masked_v = abs_v[mask]
-    masked_density_fname = plot_datacube_directly(masked_rho,global_min_rho, global_max_rho, tag = "density",x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 1.5, norm = "log", fname_subtag = "masked")
-    masked_velocity_fname = plot_datacube_directly(masked_v,global_min_v, global_max_v, tag = "velocity", x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 1.5, fname_subtag = "masked")
+    masked_density_fname = plot_datacube_directly(masked_rho,global_min_rho, global_max_rho, tag = "density",x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, norm = "log", fname_subtag = "masked")
+    masked_velocity_fname = plot_datacube_directly(masked_v,global_min_v, global_max_v, tag = "velocity", x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, fname_subtag = "masked")
     masked_density_filenames.append(masked_density_fname)
     masked_velocity_filenames.append(masked_velocity_fname)
     density_filenames.append(density_filename)
     velocity_filenames.append(velocity_filename)
+    vmean = [0,0,0]
+    if len(v[mask]):
+        vmean = v[mask].mean(axis = 0)
+    mean_velocity.append(vmean)
+    masked_density.append(masked_rho)
+    masked_velocity.append(masked_v)
+    if last_mask is None:
+        last_mask = mask #set up last mask as the first possible mask - otherwise might flicker
 
 
 frame_duration = 0.5 #2fps
@@ -318,3 +358,4 @@ if len(masked_density_filenames):
         for filename in masked_density_filenames:
             image = imageio.v3.imread(filename)
             writer.append_data(image)
+
