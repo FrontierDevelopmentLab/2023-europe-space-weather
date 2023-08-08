@@ -9,7 +9,7 @@ data_loader:
   valid_pct: 0.1
 
 train:
-   run_id: 20230802_debug1 # if missing auto generates unique
+   #run_id: 20230807_ib-debug1 # if missing auto generates unique
 
    run_dir: /mnt/training/
    log_dir: /mnt/training/<run_id>/
@@ -23,7 +23,7 @@ train:
 
    model: bmshj2018_factorized
    quality: 2
-   learning_rate: 1.e-3
+   learning_rate: 1.e-5
    learning_rate_schedule_patience: 10
    loss: mssim  # mssim or mse or rmse_sw or psnr
    nepochs: 100
