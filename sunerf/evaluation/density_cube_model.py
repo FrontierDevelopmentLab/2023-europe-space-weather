@@ -23,9 +23,9 @@ def visualise_velocity(velocity, file_path):
     return mag
 
 # base_path = '/mnt/training/HAO_pinn_cr_allview_a26978f_heliographic'
-# observer_offset = np.deg2rad(90)
+# base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+base_path = '/mnt/training/HAO_pinn_2view_cr'
 
-base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 observer_offset = np.deg2rad(90)
 
 chk_path = os.path.join(base_path, 'save_state.snf')
@@ -70,8 +70,8 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
 
         raw = loader.fine_model(enc_query_points) # Force to CPU
         # raw = loader.fine_model(enc_query_points)
-        # density = raw[..., 0]
-        density = 10 ** (15 + raw[..., 0])
+        density = raw[..., 0]
+        # density = 10 ** (15 + raw[..., 0])
         velocity = raw[..., 1:]
         density = density.view(query_points_npy.shape[:2]).cpu().detach().numpy()
         velocity = velocity.view(query_points_npy.shape[:2] + velocity.shape[-1:]).cpu().detach().numpy()
