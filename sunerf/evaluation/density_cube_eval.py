@@ -15,8 +15,8 @@ START_STEPNUM = 37  # 5
 END_STEPNUM = 37  # 74
 CHUNKS = 4
 
-R_SUN_CM = 6.957e+10
-GRID_SIZE = 500 / 16  # solar radii
+# R_SUN_CM = 6.957e+10
+# GRID_SIZE = 500 / 16  # solar radii
 
 def save_stepnum_to_datetime():
     stepnum_to_datetime = dict()
@@ -43,7 +43,7 @@ def dtstr_to_datetime(dtstr):
     return datetime.strptime(dtstr, "%Y-%m-%d %H:%M:%S")
 stepnum_to_datetime = dict(map(lambda kv: (kv[0], dtstr_to_datetime(kv[1])), stepnum_to_datetime.items()))
 
-mse_all_stepnums = []
+mae_all_stepnums = []
 
 for stepnum in range(START_STEPNUM, END_STEPNUM + 1, 1):
 
@@ -54,6 +54,11 @@ for stepnum in range(START_STEPNUM, END_STEPNUM + 1, 1):
     th = o['th1d']  # (128,)
     r = o['r1d']  # (256,)
     density_gt = o['dens']  # (258, 128, 256) (phi, theta, r)
+
+    # ignore half of r
+    # r_size = len(o['r1d'])
+    # r = o['r1d'][:int(r_size / 2)]  # (256,) -> (128, 0)
+    # density_gt = o['dens'][:,:,:int(r_size / 2)]  # (258, 128, 256) (phi, theta, r)
 
     # load model checkpoint
     base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
@@ -95,14 +100,14 @@ for stepnum in range(START_STEPNUM, END_STEPNUM + 1, 1):
     # density *= GRID_SIZE ** (-2) * R_SUN_CM ** (-3)
 
     # compare density to ground truth
-    rel_density = density / np.sum(density)
-    rel_density_gt = density_gt / np.sum(density_gt)
+    rel_density = density / np.mean(density)
+    rel_density_gt = density_gt / np.mean(density_gt)
 
     print(rel_density[0])
     print(rel_density_gt[0])
-    mse = ((rel_density - rel_density_gt)**2).mean(axis=None)
-    print(mse)
+    mae = (np.abs(rel_density - rel_density_gt)).mean(axis=None)
+    print(mae)
 
-    mse_all_stepnums.append(mse)
+    mae_all_stepnums.append(mae)
 
-print(sum(mse_all_stepnums) / len(mse_all_stepnums))
+print(sum(mae_all_stepnums) / len(mae_all_stepnums))
