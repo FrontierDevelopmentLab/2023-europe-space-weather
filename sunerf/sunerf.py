@@ -147,7 +147,7 @@ class SuNeRFModule(LightningModule):
         loss = fine_loss + coarse_loss + self.lambda_continuity * continuity_loss + self.lambda_radial_regularization * radial_regularization_loss + self.lambda_velocity_regularization * velocity_regularization_loss
         
         formatted_loss_logstring = "="*25 + "\n Regularization and continuity" "\n \t Continuity Loss: {}".format(continuity_loss)+"\n \t Radial Regularization Loss: {}".format(radial_regularization_loss) +"\n \t Velocity Regularization Loss: {}".format(radial_regularization_loss)+"\n Model Losses" + "\n \t Fine Model Loss: {}".format(fine_loss) + "\n \t Coarse Model Loss: {} \n \n \t Complete Loss: {} \n".format(coarse_loss, loss) + "="*25
-        #print(formatted_loss_logstring)
+        # print(formatted_loss_logstring)
 
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)
