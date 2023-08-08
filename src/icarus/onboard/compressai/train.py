@@ -106,7 +106,7 @@ class NCompressor(LightningModule):
         images, fts_file = batch
         x = images / 65535  # TODO: add this to dataloader
         x_hat = self.model(x)["x_hat"]
-        loss = -self.loss(x_hat, x)
+        loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 
         # for i in range(len(self.metric)):
         #     self.metric[i].update(x_hat, x)
@@ -119,7 +119,7 @@ class NCompressor(LightningModule):
 
         if batch_idx == self.validation_batch_index:
             if wandb.run:
-                diff = (x_hat - x).abs()
+                diff = (x_hat - x).abs() 
                 wandb.log(
                     {
                         "observations": [
@@ -128,7 +128,8 @@ class NCompressor(LightningModule):
                                 caption="Input",
                             ),
                             wandb.Image(
-                                x_hat[0].cpu().permute(1, 2, 0).numpy(),
+                                # Clamp [0,1] model output to avoid rescaling in wandb (when predicted values are out of [0,1])
+                                torch.clamp(x_hat[0], 0, 1).cpu().permute(1, 2, 0).numpy(),
                                 caption="Prediction",
                             ),
                             wandb.Image(
@@ -140,6 +141,19 @@ class NCompressor(LightningModule):
                 )
 
         return loss
+
+    def test_step(self, batch, batch_idx):
+        self.model.eval()
+        images, fts_file = batch
+        x = images / 65535  # TODO: add this to dataloader
+        x_hat = self.model(x)["x_hat"]
+        loss =  -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
+
+        # if batch_idx % 10 == 0:
+        self.log(
+            "test/loss", loss, prog_bar=True, sync_dist=True, batch_size=self.batch_size
+        )
+
 
     def on_validation_epoch_end(self):
         # metric = self.metric.compute()
