@@ -16,9 +16,12 @@
 
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta
 from functools import reduce
 from glob import glob
+from importlib.resources import files
+from typing import List
 
 import astropy.io.fits as fits
 import numpy as np
@@ -30,7 +33,8 @@ from rich.progress import Progress
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
-#
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def load_ephemeris_data(fname: str) -> list:
@@ -87,11 +91,62 @@ def data_to_vectors(data, Time: list = None):
     return time, x, y, z, r
 
 
+def download_batch(batch: List, folder: str) -> None:
+    filenames = []
+    try:
+        os.makedirs(folder, exist_ok=True, mode=0o777)
+    except OSError as e:
+        logging.error("Error when creating Folder = {} - {}".format(folder, e))
+
+    try:
+        filenames = Fido.fetch(
+            batch, path="{}/".format(folder), progress=False, overwrite=True, max_conn=2
+        )
+
+        if len(filenames) > 0:
+            Fido.fetch(
+                filenames,
+                path="{}/".format(folder),
+                progress=False,
+                overwrite=True,
+                max_conn=2,
+            )
+    except KeyboardInterrupt:
+        break
+    except Exception as e:
+        logging.error("Error encountered in downloading batch: {}".format(e))
+
+    return
+
+
+def get_events(min_time, max_time):
+    """
+    Get events from HEK
+    """
+    time_requested_for_batch = a.Time(str(min_time), str(max_time))
+    events = Fido.search(time_requested_for_batch, a.hek.EventType(event_type))
+    return events
+
+
+def get_images(min_time, max_time) -> dict:  #
+    time_requested_for_batch = a.Time(str(min_time), str(max_time))
+    images_cor1 = Fido.search(
+        time_requested_for_batch, a.Instrument("SECCHI"), a.Detector("COR1")
+    )
+    images_cor2 = Fido.search(
+        time_requested_for_batch, a.Instrument("SECCHI"), a.Detector("COR2")
+    )
+
+    return {"cor1": images_cor1, "cor2": images_cor2}
+
+
 if __name__ == "__main__":
-    l5_positions_fname = "./L5_positions.ephemeris"
-    stereoA_positions_fname = "./StereoA_positions.ephemeris"
-    stereoB_positions_fname = "./StereoB_positions.ephemeris"
-    SOHO_positions_fname = "./SOHO_positions.ephemeris"
+    ephem_dir = os.path.dirname(__file__)
+    l5_positions_fname = os.path.join(ephem_dir, "L5_positions.ephemeris")
+    stereoA_positions_fname = os.path.join(ephem_dir, "StereoA_positions.ephemeris")
+    stereoB_positions_fname = os.path.join(ephem_dir, "StereoB_positions.ephemeris")
+    SOHO_positions_fname = os.path.join(ephem_dir, "SOHO_positions.ephemeris")
+
     # Get data
     l5_positions_data = load_ephemeris_data(l5_positions_fname)
     stereoA_positions_data = load_ephemeris_data(stereoA_positions_fname)
@@ -255,124 +310,80 @@ if __name__ == "__main__":
         for i in range(1, len(endpoints))
     ]
 
-    event_type = "CE"
-    # Can download SECCHI data with help from FIDO
-    event_batches = []
-    cor1_batches = []
-    cor2_batches = []
-
-    for batch in timeseries_batches:
-        min_time = np.min(batch)
-        max_time = np.max(batch)
-        time_requested_for_batch = a.Time(str(min_time), str(max_time))
-        resulting_events_for_batch = Fido.search(
-            time_requested_for_batch, a.hek.EventType(event_type)
-        )
-        resulting_images_for_batch_cor1 = Fido.search(
-            time_requested_for_batch, a.Instrument("SECCHI"), a.Detector("COR1")
-        )
-        resulting_images_for_batch_cor2 = Fido.search(
-            time_requested_for_batch, a.Instrument("SECCHI"), a.Detector("COR2")
-        )
-        cor1_batches.append(resulting_images_for_batch_cor1)
-        cor2_batches.append(resulting_images_for_batch_cor2)
-        event_batches.append(resulting_events_for_batch)
-
     # Create Folders to save data to
-    # TODO: change from Current Working Directory to somewhere on the drive
-    cwd = os.getcwd()
-    config_path = os.path.join(cwd, "..", "..", "..", "config")
-    data_path = os.getcwd()
+    config_path = "/home/josh/code/2023-europe-space-weather/config"
+
     with open(os.path.join(config_path, "onboard.yaml"), "r") as f:
         data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
+
     cor1_folder = os.path.join(data_path, "data", "cor1")
     cor2_folder = os.path.join(data_path, "data", "cor2")
     event_folder = os.path.join(data_path, "data", "events")
-    try:
-        os.makedirs(cor1_folder, exist_ok=True, mode=0o777)
-    except OSError as e:
-        logging.error(
-            "Error when creating Cor1 Folder = {} - {}".format(cor1_folder, e)
-        )
+
     try:
         os.makedirs(event_folder, exist_ok=True, mode=0o777)
     except OSError as e:
-        logging.error(
-            "Error when creating event Folder = {} - {}".format(event_folder, e)
-        )
+        logging.error("Error when creating Folder = {} - {}".format(event_folder, e))
 
-    try:
-        os.makedirs(cor2_folder, exist_ok=True, mode=0o777)
-    except OSError as e:
-        logging.error(
-            "Error when creating Cor2 Folder = {} - {}".format(cor2_folder, e)
-        )
-    # Download data
-    filenames_c1 = []
-    filenames_c2 = []
-    with Progress() as progress:
-        Task = progress.add_task("Download Cor1 Batches", total=len(cor1_batches))
-        for cor1_batch in cor1_batches:
-            try:
-                first_batch_downloads = Fido.fetch(
-                    cor1_batch,
-                    path="{}/".format(cor1_folder),
-                    progress=False,
-                    overwrite=False,
-                )
-                filenames_c1.extend(first_batch_downloads)
-            except Exception as e:
-                logging.error(
-                    "Error encountered in downloading batch for Cor1: {}".format(e)
-                )
-            progress.update(Task, advance=1)
+    logger.info("Searching for timeseries")
+    event_type = "CE"
+    # Can download SECCHI data with help from FIDO
 
-    with Progress() as progress:
-        Task = progress.add_task("Download Cor2 Batches", total=len(cor2_batches))
-        for cor2_batch in cor2_batches:
-            try:
-                second_batch_downloads = Fido.fetch(
-                    cor2_batch,
-                    path="{}/".format(cor2_folder),
-                    progress=False,
-                    overwrite=False,
-                )
-                filenames_c2.extend(second_batch_downloads)
-            except Exception as e:
-                logging.error(
-                    "Error encountered in downloading batch for Cor2: {}".format(e)
-                )
-            progress.update(Task, advance=1)
-    # To find data of level: fits.open as f: f[0].header
-    # Files may not be completely downloaded. If Fido is provided with a filename it has already loaded, it will not try to redownload it.
-    # Pass downloaded files into Fido as a new fetch.
-    try:
-        second_batch_downloads = Fido.fetch(
-            filenames_c2,
-            path="{}/".format(cor2_folder),
-            progress=False,
-            overwrite=False,
-        )
-    except Exception as e:
-        logging.error("Error encountered in downloading batch for Cor2: {}".format(e))
-    try:
-        second_batch_downloads = Fido.fetch(
-            filenames_c1,
-            path="{}/".format(cor1_folder),
-            progress=False,
-            overwrite=False,
-        )
-    except Exception as e:
-        logging.error("Error encountered in downloading batch for Cor1: {}".format(e))
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+    from rich.table import Table
 
-# CME Event handling
-# event_batches is effectively a list of dictionaries under the hek key
-for time_batch, event_batch in zip(timeseries_batches, event_batches):
-    min_time = pd.to_datetime(np.min(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
-    max_time = pd.to_datetime(np.max(time_batch)).strftime("%Y_%m_%d_%H_%M_%S")
-    filename = os.path.join(event_folder, "events_{}_{}.csv".format(min_time, max_time))
-    # only saving event start and end times for now, some events are void
-    if len(event_batch["hek"]):
-        event_batch["hek"]["event_starttime", "event_endtime"].write(
-            filename, format="csv"
-        )
+    job_progress = Progress(
+        "{task.description}",
+        SpinnerColumn(),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    )
+
+    progress_table = Table.grid()
+
+    # Left (all batches)
+    overall_progress = Progress()
+    overall_task = overall_progress.add_task(
+        "All Jobs", total=int(len(timeseries_batches))
+    )
+    progress_table.add_row(
+        Panel.fit(
+            overall_progress,
+            title="Overall Progress",
+            border_style="green",
+            padding=(2, 2),
+        ),
+        Panel.fit(job_progress, title="[b]Jobs", border_style="red", padding=(1, 2)),
+    )
+
+    with Live(progress_table, refresh_per_second=10):
+        for i, batch in enumerate(timeseries_batches):
+            for j in range(len(batch) - 1):
+                min_time = batch[j]
+                max_time = batch[j + 1]
+
+                logger.info("Searching between {} and {}".format(min_time, max_time))
+                events = get_events(min_time, max_time)
+
+                # Download data
+                logger.info("Starting Cor1 Download")
+                download_batch(res["cor1"], cor1_folder)
+                logger.info("Starting Cor2 Download")
+                download_batch(res["cor2"], cor2_folder)
+
+                min_time_str = pd.to_datetime(min_time).strftime("%Y_%m_%d_%H_%M_%S")
+                max_time_str = pd.to_datetime(max_time).strftime("%Y_%m_%d_%H_%M_%S")
+                filename = os.path.join(
+                    event_folder, f"events_{min_time_str}_{max_time_str}.csv"
+                )
+                # only saving event start and end times for now, some events are void
+                if len(res["events"]["hek"]):
+                    res["events"]["hek"]["event_starttime", "event_endtime"].write(
+                        filename, format="csv", overwrite=True
+                    )
+
+                # job_progress.advance(job.id)
+
+            overall_progress.overall_task(job.id, completed=i)
