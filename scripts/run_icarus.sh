@@ -143,4 +143,4 @@ python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/prep-data/prep_P
 python -m sunerf.prep.prep_obs --resolution 512
 
 # train OBS
-python -m sunerf.sunerf --wandb_name "obs" --data_path_pB "/mnt/prep-data/prep_OBS/*_1P*.fits" --data_path_tB "/mnt/prep-data/prep_OBS/*_1B*.fits" --path_to_save "/mnt/training/OBS_v0" --train "config/train.yaml" --hyperparameters "config/hyperparams_obs.yaml"
+python -m sunerf.sunerf --wandb_name "obs" --data_path_pB "/mnt/prep-data/prep_OBS/*_1P*.fts" --data_path_tB "/mnt/prep-data/prep_OBS/*_1B*.fts" --path_to_save "/mnt/training/OBS_v0" --train "config/train.yaml" --hyperparameters "config/hyperparams_obs.yaml"
