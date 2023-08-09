@@ -29,7 +29,8 @@ def _loadMLprepMap(file_path, out_path, resolution):
 
     # normalize image data
     data = s_map.data
-    v_min, v_max = -24, -15
+    # tB: -23.63556 -15.273365; pB: -29.108622 -18.05343
+    v_min, v_max = -29, -15
     data[data > 0] = (np.log(data[data > 0]) - v_min) / (v_max - v_min)
     data[data < 0] = 0  # remove negative values
     data = np.nan_to_num(data, nan=0)
