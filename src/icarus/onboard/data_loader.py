@@ -102,7 +102,7 @@ class FitsDataModule(LightningDataModule):
         self.num_workers = hparams.get("num workers", 4)
 
         cwd = os.getcwd()
-        config_path = os.path.join(cwd, "..", "..", "..", "config")
+        config_path = os.path.join(cwd, "config")  # "..", "..", "..", "config")
         data_path = os.getcwd()
         with open(os.path.join(config_path, "onboard_old.yaml"), "r") as f:
             data_path = yaml.load(f, Loader=yaml.Loader)["drive_locations"]["datapath"]
