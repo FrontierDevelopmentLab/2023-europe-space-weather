@@ -53,7 +53,7 @@ def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
 
     Parameters
     ----------
-    file_path: path to the FTIS file.
+    file_path: path to the FITS file.
     resolution: target resolution in pixels.
 
     Returns

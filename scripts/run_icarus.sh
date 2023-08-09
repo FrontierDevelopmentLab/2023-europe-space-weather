@@ -126,7 +126,7 @@ python -m sunerf.prep.prep_psi_cor --psi_path "/mnt/ground-data/PSI/b_raw/*.fits
 #                    #
 ######################
 
-#Prep_HAO_1view
+# Prep_HAO_1view
 python -m sunerf.sunerf --wandb_name "hao_pinn_1view" --data_path_pB "/mnt/prep-data/prep_HAO_1view/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_1view/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_1view" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
 # Prep_HAO_2view
@@ -138,3 +138,9 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_all" --data_path_pB "/mnt/prep-da
 
 # full training PSI
 python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/prep-data/prep_PSI/pb_raw/*.fits" --data_path_tB "/mnt/prep-data/prep_PSI/b_raw/*.fits" --path_to_save "/mnt/training/PSI_v1" --train "config/train.yaml" --hyperparameters "config/hyperparams_icarus.yaml"
+
+# prep OBS
+python -m sunerf.prep.prep_obs --resolution 512
+
+# train OBS
+python -m sunerf.sunerf --wandb_name "obs" --data_path_pB "/mnt/prep-data/prep_OBS/*_1P*.fits" --data_path_tB "/mnt/prep-data/prep_OBS/*_1B*.fits" --path_to_save "/mnt/training/OBS_v0" --train "config/train.yaml" --hyperparameters "config/hyperparams_obs.yaml"

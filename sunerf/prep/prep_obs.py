@@ -6,19 +6,16 @@ from itertools import repeat
 
 import numpy as np
 from astropy import units as u
-from astropy.io.fits import getheader
 from sunpy.map import Map
-
-from sunerf.data.utils import psi_norms
 
 
 def _loadMLprepMap(file_path, out_path, resolution):
-    """Load and preprocess PSI file.
+    """Load and preprocess OBS file.
 
 
     Parameters
     ----------
-    file_path: path to the FITS file.
+    file_path: path to the FTS file.
     resolution: target resolution in pixels.
 
     Returns
@@ -27,14 +24,13 @@ def _loadMLprepMap(file_path, out_path, resolution):
     """
     # load Map
     s_map = Map(file_path)
-    if np.abs(s_map.carrington_latitude.value) > 7:
-        return
     # adjust image size
     s_map = s_map.resample((resolution, resolution) * u.pix)
 
     # normalize image data
     data = s_map.data
-    data = psi_norms[int(s_map.wavelength.value)](data)
+    v_min, v_max = -24, -15
+    data[data > 0] = (np.log(data[data > 0]) - v_min) / (v_max - v_min)
     data[data < 0] = 0  # remove negative values
     data = np.nan_to_num(data, nan=0)
     data = data.astype(np.float32)
@@ -47,23 +43,23 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    p.add_argument('--psi_path', type=str,
-                   default='/mnt/psi-data/PSI/AIA_171/*.fits',
-                   help='search path for AIA maps.')
+    p.add_argument('--obs_path', type=str,
+                   default='/mnt/ground-data/data_fits_stereo_2014_02/*/*.fts',
+                   help='search path for maps.')
     p.add_argument('--resolution', type=float,
                    default=1024,
                    help='target image scale in arcsec per pixel.')
     p.add_argument('--output_path', type=str,
-                   default='/mnt/psi-data/prep_psi/171',
+                   default='/mnt/prep-data/prep_OBS',
                    help='path to save the converted maps.')
     args = p.parse_args()
 
     os.makedirs(args.output_path, exist_ok=True)
     # Load paths
-    psi_paths = sorted(glob(args.psi_path))
+    obs_paths = sorted(glob(args.obs_path))
 
-    assert len(psi_paths) > 0, 'No files found.'
+    assert len(obs_paths) > 0, 'No files found.'
 
     # Load maps
     with multiprocessing.Pool(os.cpu_count()) as p:
-        p.starmap(_loadMLprepMap, zip(psi_paths, repeat(args.output_path), repeat(args.resolution)))
+        p.starmap(_loadMLprepMap, zip(obs_paths, repeat(args.output_path), repeat(args.resolution)))
