@@ -32,6 +32,8 @@ chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_cube')
 
 
+#parameter for filtering points that belong to a CME
+mask_mode = True
 
 # init loader
 loader = SuNeRFLoader(chk_path, resolution=512)
@@ -111,15 +113,20 @@ density_threshold = perc_dens
 velocity_threshold = perc_speed #Most CMEs appear to be moving with a velocity of 3
 print("Thresholding density at {} grams per cm^3, velocity at {:.3f} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
 
+def compute_alpha(alpha_mode, cube_norm, alpha_expon,distance_from_sun):
+    if alpha_mode==0:
+        alpha = cube_norm**alpha_expon 
+    elif alpha_mode==1:
+        sig_arg = cube_norm**alpha_expon + distance_from_sun
+        alpha = np.tanh(sig_arg)
 
-def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z_fil, alpha_expon, norm = "linear",fname_subtag = None):
+def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z_fil, alpha_expon, norm = "linear", fname_subtag = None, alpha_mode=1):
     cube_norm = (cube - global_min)/(global_max - global_min)
     plt.close("all")
     fig = plt.figure()
     ax = fig.add_subplot(111, projection = "3d")
     distance_from_sun = np.sqrt(x_fil**2 + y_fil**2 + z_fil**2)/250
-    sig_arg = cube_norm**alpha_expon + distance_from_sun
-    alpha = np.tanh(sig_arg) #Sigmoid
+    alpha = compute_alpha(alpha_mode, cube_norm, alpha_expon,distance_from_sun)
     if(len(x_fil) and len(y_fil) and len(z_fil)):
         ax.scatter(x_fil, y_fil, z_fil, c=cube, marker='.',norm=norm , vmin=global_min, vmax=global_max, alpha = alpha) #
         if norm == "log":
@@ -188,7 +195,7 @@ def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z
     return filename
     
 
-def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plot_threshold:float,  alpha_expon:float = 1.5, norm = "linear"):
+def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plot_threshold:float,  alpha_expon:float = 1.5, norm = "linear", alpha_mode=1):
     '''
         Function plotting the datacube, the Sun, Earth and L5, alongside Earths orbit
     '''
@@ -213,8 +220,7 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     cube_norm = cube_norm[mask]
 
     distance_from_sun = np.sqrt(x_filtered_again**2 + y_filtered_again**2 + z_filtered_again**2)/250
-    sig_arg = cube_norm**alpha_expon + distance_from_sun
-    alpha = np.tanh(sig_arg) #Sigmoid
+    alpha = compute_alpha(alpha_mode, cube_norm, alpha_expon,distance_from_sun)
     ax.scatter(x_filtered_again, y_filtered_again, z_filtered_again, c=cube, marker='.',norm=norm , vmin=global_min, vmax=global_max, alpha = alpha) #
     ax.set_xlim(-250,250)
     ax.set_ylim(-250,250)
@@ -302,39 +308,40 @@ mean_velocity = []
 for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     density_filename = plot_datacube(rho,global_min_rho, global_max_rho, tag = "density", idx = i,plot_threshold = density_threshold,  alpha_expon = 3, norm = "log")
     velocity_filename = plot_datacube(abs_v,global_min_v, global_max_v, tag = "velocity", idx = i,plot_threshold = velocity_threshold,  alpha_expon = 3)
-    
-    density_mask = rho > density_threshold
-    velocity_mask = abs_v > velocity_threshold
-    mask = density_mask & velocity_mask   #
-    if last_mask is not None:
-        # Last mask needs to be blurred - we want to remove voxels around the currently active points, as well as the points themselves
-        # last_mask exists, therefore we take out the background
-        last_mask = ~last_mask 
-        #Every spot that has been accepted last time is now disabled
-        # every new spot is still possible - achieving recent background subtraction
-        mask = mask & last_mask
-        
-    # Positions that belong only to outliers
-    x_filtered_again = x_filtered[mask]
-    y_filtered_again = y_filtered[mask]
-    z_filtered_again = z_filtered[mask]
-    # Values that belong only to outliers
-    masked_rho = rho[mask]
-    masked_v = abs_v[mask]
-    masked_density_fname = plot_datacube_directly(masked_rho,global_min_rho, global_max_rho, tag = "density",x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, norm = "log", fname_subtag = "masked")
-    masked_velocity_fname = plot_datacube_directly(masked_v,global_min_v, global_max_v, tag = "velocity", x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, fname_subtag = "masked")
-    masked_density_filenames.append(masked_density_fname)
-    masked_velocity_filenames.append(masked_velocity_fname)
     density_filenames.append(density_filename)
     velocity_filenames.append(velocity_filename)
-    vmean = [0,0,0]
-    if len(v[mask]):
-        vmean = v[mask].mean(axis = 0)
-    mean_velocity.append(vmean)
-    masked_density.append(masked_rho)
-    masked_velocity.append(masked_v)
-    if last_mask is None:
-        last_mask = mask #set up last mask as the first possible mask - otherwise might flicker
+    if mask_mode:
+        density_mask = rho > density_threshold
+        velocity_mask = abs_v > velocity_threshold
+        mask = density_mask & velocity_mask   #
+        if last_mask is not None:
+            # Last mask needs to be blurred - we want to remove voxels around the currently active points, as well as the points themselves
+            # last_mask exists, therefore we take out the background
+            last_mask = ~last_mask 
+            #Every spot that has been accepted last time is now disabled
+            # every new spot is still possible - achieving recent background subtraction
+            mask = mask & last_mask
+            
+        # Positions that belong only to outliers
+        x_filtered_again = x_filtered[mask]
+        y_filtered_again = y_filtered[mask]
+        z_filtered_again = z_filtered[mask]
+        # Values that belong only to outliers
+        masked_rho = rho[mask]
+        masked_v = abs_v[mask]
+        masked_density_fname = plot_datacube_directly(masked_rho,global_min_rho, global_max_rho, tag = "density",x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, norm = "log", fname_subtag = "masked")
+        masked_velocity_fname = plot_datacube_directly(masked_v,global_min_v, global_max_v, tag = "velocity", x_fil = x_filtered_again, y_fil = y_filtered_again, z_fil = z_filtered_again, idx = i,  alpha_expon = 3, fname_subtag = "masked")
+        masked_density_filenames.append(masked_density_fname)
+        masked_velocity_filenames.append(masked_velocity_fname)
+
+        vmean = [0,0,0]
+        if len(v[mask]):
+            vmean = v[mask].mean(axis = 0)
+        mean_velocity.append(vmean)
+        masked_density.append(masked_rho)
+        masked_velocity.append(masked_v)
+        if last_mask is None:
+            last_mask = mask #set up last mask as the first possible mask - otherwise might flicker
 
 
 frame_duration = 0.5 #2fps
@@ -348,14 +355,16 @@ if len(velocity_filenames):
         for filename in velocity_filenames:
             image = imageio.v3.imread(filename)
             writer.append_data(image)
-if len(masked_velocity_filenames):
-    with imageio.get_writer(os.path.join(video_path_dens,'masked_velocity.gif'), mode='I', duration=frame_duration) as writer:
-        for filename in masked_velocity_filenames:
-            image = imageio.v3.imread(filename)
-            writer.append_data(image)
-if len(masked_density_filenames):
-    with imageio.get_writer(os.path.join(video_path_dens,'masked_density.gif'), mode='I', duration=frame_duration) as writer:
-        for filename in masked_density_filenames:
-            image = imageio.v3.imread(filename)
-            writer.append_data(image)
+
+if mask_mode:
+    if len(masked_velocity_filenames):
+        with imageio.get_writer(os.path.join(video_path_dens,'masked_velocity.gif'), mode='I', duration=frame_duration) as writer:
+            for filename in masked_velocity_filenames:
+                image = imageio.v3.imread(filename)
+                writer.append_data(image)
+    if len(masked_density_filenames):
+        with imageio.get_writer(os.path.join(video_path_dens,'masked_density.gif'), mode='I', duration=frame_duration) as writer:
+            for filename in masked_density_filenames:
+                image = imageio.v3.imread(filename)
+                writer.append_data(image)
 
