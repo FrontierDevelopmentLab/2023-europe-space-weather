@@ -1,0 +1,31 @@
+data_loader:
+  data_dir: /mnt/onboard_data/training_data/v1
+  input_fnames_list : /mnt/onboard_data/training_data/fnames_test100.csv
+  batch_size: 1
+  num_workers: 1
+  img_size: 2048
+
+  train_pct: 0.85
+  valid_pct: 0.1
+
+train:
+   #run_id: 20230807_ib-debug1 # if missing auto generates unique
+
+   run_dir: /mnt/training_classifier/
+   log_dir: /mnt/training_classifier/<run_id>/
+   ckpt_dir: /mnt/training_classifier/<run_id>/checkpoints/
+   out_dir: /mnt/training_classifier/<run_id>/
+
+   wandb_mode: offline # online or offline or disabled
+
+   resume_from_checkpoint: False
+   ckpt_path: last # path or "last"
+
+   model: resnet18 # resnet18 or resnet50 for now
+   pretrained : True
+   learning_rate: 1.e-5
+   learning_rate_schedule_patience: 10
+   loss: bce
+   nepochs: 100
+   log_every_n_steps: 1
+   log_ckpt_every_n_steps: 1 # 10
