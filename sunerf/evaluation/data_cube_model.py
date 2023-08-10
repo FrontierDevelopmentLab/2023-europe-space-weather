@@ -368,3 +368,110 @@ if mask_mode:
                 image = imageio.v3.imread(filename)
                 writer.append_data(image)
 
+
+def calculate_mean_velocity_and_density(density_cube:np.ndarray, velocity_cube:np.ndarray, speed_cube:np.ndarray, percentile:float, speeds:np.array = None, densities:np.array = None, last_mask = None) -> dict:
+    '''
+        Function: Calculate mean velocity:
+            Given the density and velocity cubes, calculates the mask needed to extract the CME.
+            Using the mask, calculates 
+                the mean velocity (speed and direction) of the CME (in Solar Radii per 2 days), 
+            alongside
+                the mean density (in N_e per cm^3),
+            
+        Input:
+            density_cube: np.ndarray: Density cube used extracted from fine model in the SuNeRF
+            velocity_cube: np.ndarray: Velocity cube from the same source
+            speed_cube: np.ndarray: Generated from velocity cube, vector norm of the velocities
+            percentile: Float: percentile used to set the threshold of speeds and densities
+            speeds: np.array : optional: default None: Array of speeds to use for calculating the thresholds. 
+                                         If None, calculates this array from passed velocity_cube
+            densities: np.array: optional: default None:  Array of densities used for calculating a threshold.
+                                         If None, calculates array from density_cube
+            last_mask: np.array: optional: default None: Mask used to deactivate pixels in background subtraction
+        Output:
+            Dictionary with 7 keys:
+                "Density":    Density of the CME that has been detected in N_e/cm^3
+                "Velocity": Mean Velocity Vector of the CME
+                "Speed": |v| - vector norm of velocity
+                "Direction": |\hat{v}| - Direction of the mean velocity vector
+                "Densities": Collection of densities that has been accepted
+                "Velocities": Collection of velocities that have been accepted
+                "Mask": mask used to accept voxels (in either cube)
+    '''
+
+    percentile = np.clip(percentile,0,99)
+    if speeds is None:
+        speeds = np.flatten(speed_cube)
+    if densities is None:
+        densities = np.flatten(densities)
+    density_threshold = np.percentile(np.asarray(densities),percentile)
+    velocity_threshold = np.percentile(np.asarray(speeds),percentile)
+    
+
+    density_mask = densities > density_threshold
+    velocity_mask = speeds > velocity_threshold
+    mask = density_mask & velocity_mask   #
+    if last_mask is not None:
+        # Last mask needs to be blurred - we want to remove voxels around the currently active points, as well as the points themselves
+        # last_mask exists, therefore we take out the background
+        last_mask = ~last_mask 
+        #Every spot that has been accepted last time is now disabled
+        # every new spot is still possible - achieving recent background subtraction
+        mask = mask & last_mask
+    
+    rhomean = None
+    if len(density_cube[mask]):
+        rhomean = density_cube[mask].mean()
+    vmean = None
+    if len(velocity_cube[mask]):
+        vmean = velocity_cube[mask].mean(axis = 0)
+    speedmean = None
+    if len(speed_cube[mask]):
+        speedmean = speed_cube[mask].mean()
+    direction = vmean/(np.dot(vmean,vmean))
+
+    out_dict = {}
+    out_dict["Density"] = rhomean
+    out_dict["Velocity"] = vmean
+    out_dict["Speed"] = speedmean
+    out_dict["Direction"] = direction
+    out_dict["Densities"] = density_cube[mask]
+    out_dict["Velocities"] = velocity_cube[mask]
+    out_dict["Mask"] = mask
+    
+    return out_dict
+
+def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array, densities:np.ndarray, velocities:np.ndarray, positions_x:np.array, positions_y:np.array,positions_z:np.array) -> float:
+    """
+    This function estimates the probability of a detected CME hitting earth.
+    Currently, this is a simplified model, working with a kernel density estimate for the distribution of velocity.
+    
+    It estimates the probability of a CME hitting earth within the next two steps, with the following calculations:
+    1. Calculate the direction of earth from the CME mean positions
+    2. Calculate the KDE of direction vectors from the velocity array
+    3. Use KDE to calculate the probability of the CME moving in the direction of earth - P0
+    4. Move CME to next position based on velocity (new position vectors)
+    5. Assuming: no new mass has entered the CME (this is possible)
+                 velocity distribution hasn't changed (it will)
+                   recheck probability of CME hitting earth now from same CME) - P1
+    
+
+    Args:
+        earth_position (np.array): [x,y,z] - position vector of earth
+        mean_velocity (np.array): [vx,vy,vz] - mean velocity vector of the CME - output of calculate_mean_velocity_and_density
+        densities (np.ndarray): Density vector that is designated as CME - useful for classification
+        velocities (np.ndarray): Velocities of points designated as CME
+        positions_x (np.array): Positions that have been designated as CME
+        positions_y (np.array): "
+        positions_z (np.array): "
+
+    Returns:
+        probability: float: probability of the CME hitting earth
+    """
+    positions = np.stack([positions_x,positions_y,positions_z], axis = 1)
+    connection_vector = positions - earth_position
+    #direction vectors
+    direction_vectors = np.asarray([v/np.dot(v,v) for v in connection_vector]) 
+    #direction vectors
+    mean_direction = mean_velocity/np.dot(mean_velocity,mean_velocity)
+    raise NotImplementedError
