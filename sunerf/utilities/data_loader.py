@@ -186,6 +186,7 @@ def get_data(config_data):
 def _load_map_data(map_path):
     simplefilter('ignore')
     s_map = Map(map_path)
+    s_map = s_map.rotate(recenter=True)
     # compute focal length
     scale = s_map.scale[0]  # scale of pixels [arcsec/pixel]
     W = s_map.data.shape[0]  # number of pixels
