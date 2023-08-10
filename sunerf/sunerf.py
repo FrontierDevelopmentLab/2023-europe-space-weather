@@ -140,7 +140,7 @@ class SuNeRFModule(LightningModule):
         radial_regularization_loss = (torch.norm(radial_regularization_loss, dim=-1) ** 2).mean()
 
         # regularize velocity
-        velocity_regularization_target = 75 # Solar Radii per 2 days
+        velocity_regularization_target = 3 # Solar Radii per 2 days
         velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target).abs()).mean() / 300
 
 
