@@ -3,19 +3,26 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-from astropy.nddata import block_reduce
-from matplotlib import pyplot as plt
-from matplotlib.colors import SymLogNorm
 from tqdm import tqdm
+from tvtk.api import tvtk, write_data
 
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
-from tvtk.api import tvtk, write_data
-
 base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 chk_path = os.path.join(base_path, 'save_state.snf')
-video_path_dens = os.path.join(base_path, 'video_density')
+save_path = os.path.join(base_path, 'vtk')
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# init loader
+resolution = 256
+loader = SuNeRFLoader(chk_path)
+
+n_time_points = 10
+batch_size = 4096 * 4 * torch.cuda.device_count()
+os.makedirs(save_path, exist_ok=True)
+
 
 def save_vtk(vec, path, name, scalar=None, scalar_name='scalar', Mm_per_pix=1):
     """Save numpy array as VTK file
@@ -48,44 +55,45 @@ def save_vtk(vec, path, name, scalar=None, scalar_name='scalar', Mm_per_pix=1):
 
     write_data(sg, path)
 
-# init loader
-loader = SuNeRFLoader(chk_path, resolution=512)
-n_points = 40
-os.makedirs(video_path_dens, exist_ok=True)
 
-densities = []
-for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time, n_points)), total=n_points):
-    # TEST FOR KNOWN LOCATION
-    lati = 0
-    loni = 272.686
-    di = 214.61000061  # (* u.m).to(u.solRad).value
+with torch.no_grad():
+    for timei in tqdm(pd.date_range(loader.start_time, loader.end_time, n_time_points), total=n_time_points):
+        # DENSITY SLICE
+        time = normalize_datetime(timei)
 
-    # DENSITY SLICE
-    time = normalize_datetime(timei)
+        query_points_npy = np.stack(np.meshgrid(
+            np.linspace(-100, 100, resolution, dtype=np.float32),
+            np.linspace(-100, 100, resolution, dtype=np.float32),
+            np.linspace(-100, 100, resolution, dtype=np.float32),
+            np.ones((1,), dtype=np.float32) * time, indexing='ij'), -1)
 
-    query_points_npy = np.stack(np.mgrid[-100:100:2, -100:100:2, -100:100:2, 1:2], -1).astype(np.float32)
+        mask = np.sqrt(np.sum(query_points_npy[:, :, :, 0, :3] ** 2, axis=-1)) < 21
 
-    mask = np.sqrt(np.sum(query_points_npy[:, :, 0, 0, :3] ** 2, axis=-1)) < 21
+        query_points = torch.from_numpy(query_points_npy)
 
-    query_points = torch.from_numpy(query_points_npy)
-    query_points[..., -1] = time
+        # Prepare points --> encoding.
+        query_points = query_points.view(-1, 4)
 
-    # Prepare points --> encoding.
-    enc_query_points = loader.encoding_fn(query_points.view(-1, 4))
+        print('load cube')
+        density, velocity = [], []
+        for i in range(np.ceil(query_points.shape[0] / batch_size).astype(int)):
+            batch = loader.encoding_fn(query_points[i * batch_size:(i + 1) * batch_size])
+            raw = loader.fine_model(batch.to(device))
+            density += [raw[..., 0].cpu().detach()]
+            velocity += [raw[..., 1:].cpu().detach()]
 
-    raw = loader.fine_model(enc_query_points)
-    density = raw[..., 0]
-    velocity = raw[..., 1:]
+        # stack results
+        density = torch.cat(density, dim=0)
+        velocity = torch.cat(velocity, dim=0)
+        # reshape
+        density = density.view(query_points_npy.shape[:3]).cpu().detach().numpy()
+        velocity = velocity.view(query_points_npy.shape[:3] + velocity.shape[-1:]).cpu().detach().numpy()
+        #
+        velocity = velocity  # * density[..., None] / 1e27 # scale to mass flux
+        # apply mask
+        density[mask] = 0  # np.nan
+        velocity[mask] = 0  # np.nan
 
-    density = density.view(query_points_npy.shape[:3]).cpu().detach().numpy()
-    velocity = velocity.view(query_points_npy.shape[:3] + velocity.shape[-1:]).cpu().detach().numpy()
-    velocity = velocity / 10 #* density[..., None] / 1e27 # scale to mass flux
-    # apply mask
-    density[mask] = np.nan
-    velocity[mask] = np.nan
-    # print(density.max(), density.min())
-    densities += [density]
-
-    vtk_filename = os.path.join(base_path,"data_cube_{}.vtk".format(i))
-    save_vtk(velocity, vtk_filename, "v", density, "density" )
-
+        print('save vtk')
+        vtk_filename = os.path.join(save_path, f"data_cube_{timei.isoformat('T', timespec='minutes')}.vtk")
+        save_vtk(velocity, vtk_filename, "v", density, "density")
