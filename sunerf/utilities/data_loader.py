@@ -186,7 +186,7 @@ def get_data(config_data):
 def _load_map_data(map_path):
     simplefilter('ignore')
     s_map = Map(map_path)
-    s_map = s_map.rotate(recenter=True)
+    # s_map = s_map.rotate(recenter=True, order=3)
     # compute focal length
     scale = s_map.scale[0]  # scale of pixels [arcsec/pixel]
     W = s_map.data.shape[0]  # number of pixels
@@ -200,6 +200,7 @@ def _load_map_data(map_path):
                           s_map.dsun.to(u.solRad).value).float().numpy()
 
     image = s_map.data.astype(np.float32)
+    image = image.T
     all_rays = np.stack(get_rays(image.shape[0], image.shape[1], s_map.reference_pixel, focal, pose), -2)
 
     # crop to square

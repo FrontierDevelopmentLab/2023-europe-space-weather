@@ -15,8 +15,8 @@ Stratified sampling:
   # and the box sampling with more points close to the solar surface (True)
 
 Scaling:
-  vmin : -29
-  vmax : -15
+  vmin : -23
+  vmax : -18
 
 Model:
   d_filter : 512          # Dimensions of linear layer filters
