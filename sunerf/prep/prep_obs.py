@@ -6,10 +6,11 @@ from itertools import repeat
 
 import numpy as np
 from astropy import units as u
-from sunpy.map import Map
+from astropy.coordinates import SkyCoord
+from sunpy.map import Map, all_coordinates_from_map
 
 
-def _loadMLprepMap(file_path, out_path, resolution):
+def _loadMLprepMap(file_path, out_path, resolution, occ_rad=4 * u.R_sun):
     """Load and preprocess OBS file.
 
 
@@ -27,17 +28,27 @@ def _loadMLprepMap(file_path, out_path, resolution):
     # adjust image size
     s_map = s_map.resample((resolution, resolution) * u.pix)
 
+    pixel_coords = all_coordinates_from_map(s_map)
+    solar_center = SkyCoord(0 * u.deg, 0 * u.deg, frame=s_map.coordinate_frame)
+
+    pixel_radii = np.sqrt((pixel_coords.Tx - solar_center.Tx) ** 2 + \
+                          (pixel_coords.Ty - solar_center.Ty) ** 2)
+
+    mask = pixel_radii < s_map.rsun_obs * occ_rad.to(u.R_sun).value
+
     # normalize image data
     data = s_map.data
     # tB: -23.63556 -15.273365; pB: -29.108622 -18.05343
-    v_min, v_max = -29, -15
-    data[data > 0] = (np.log(data[data > 0]) - v_min) / (v_max - v_min)
-    data[data < 0] = 0  # remove negative values
+    v_min, v_max = -29, -18
+    data = (np.log(data) - v_min) / (v_max - v_min)
     data = np.nan_to_num(data, nan=0)
+    data = np.clip(data, 0, 1)
     data = data.astype(np.float32)
 
+    data[mask] = np.nan
+
     s_map = Map(data, s_map.meta)
-    s_map.save(os.path.join(out_path, os.path.basename(file_path)))
+    s_map.save(os.path.join(out_path, os.path.basename(file_path)), overwrite=True)
 
 
 if __name__ == '__main__':

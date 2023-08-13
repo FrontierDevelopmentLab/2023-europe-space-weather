@@ -188,6 +188,8 @@ class SuNeRFModule(LightningModule):
                 'distance': distance}
 
     def validation_epoch_end(self, outputs):
+        if len(outputs) == 0:
+            return
         target_img = torch.cat([o['target_img'] for o in outputs])
         channel_map = torch.cat([o['channel_map'] for o in outputs])
         channel_map_coarse = torch.cat([o['channel_map_coarse'] for o in outputs])
