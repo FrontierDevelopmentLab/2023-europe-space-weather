@@ -38,7 +38,7 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 #####################################
 
 # Download all viewpoints first into data_fits subdirectory, then download all 005.step files as well.
-gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits /mnt/ground-data/data_fits
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits /mnt/ground-data/
 
 # Download 2 Viewpoints only into data_fits directory, emulating L5 and Earth (60° Diff) /mnt/ground-data/data_fits
 gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_tB /mnt/ground-data/data_fits/
