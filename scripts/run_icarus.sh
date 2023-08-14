@@ -22,6 +22,13 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_pB/*.fits" --output_path /mnt/prep-data/prep_HAO_2view_background
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_tB/*.fits" --output_path /mnt/prep-data/prep_HAO_2view_background
 
+# Prep 5view
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_220W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_100W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_040W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/*_bang_0000_*/stepnum_005.fits" --output_path /mnt/prep-data/prep_HAO_2view_background --check_matching
 
 #####################################
