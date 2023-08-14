@@ -9,6 +9,7 @@ from os.path import dirname
 from pathlib import Path
 from typing import Optional
 
+from sunpy.map.maputils import all_coordinates_from_map
 import numpy as np
 import torch
 import yaml
@@ -38,6 +39,7 @@ from lightning.pytorch.callbacks import (
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.pytorch.tuner.tuning import Tuner
+
 
 
 class NCompressor(LightningModule):
@@ -83,10 +85,15 @@ class NCompressor(LightningModule):
 
     def training_step(self, batch, batch_idx):
         images, fts_file = batch
-        x = images / 65535  # TODO: add this to dataloader
+        x = images #/ 65535  # TODO: add this to dataloader
+        #print("x min = ", torch.min(x))
+        #print("x max = ", torch.max(x))
         x_hat = self.forward(x)["x_hat"]
+        #print("x_hat min = ", torch.min(x_hat))
+        #print("x_hat max = ", torch.max(x_hat))
+        #print("x hat shape = ", x_hat.shape)
         loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
-
+        #print("loss = ", loss)
         # if batch_idx % 10 == 0:
         self.log(
             "train/loss",
@@ -104,7 +111,7 @@ class NCompressor(LightningModule):
     def validation_step(self, batch, batch_idx):
         self.model.eval()
         images, fts_file = batch
-        x = images / 65535  # TODO: add this to dataloader
+        x = images #/ 65535  # TODO: add this to dataloader
         x_hat = self.model(x)["x_hat"]
         loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 
@@ -124,16 +131,19 @@ class NCompressor(LightningModule):
                     {
                         "observations": [
                             wandb.Image(
-                                x[0].cpu().permute(1, 2, 0).numpy(),
-                                caption="Input",
+                                #x[0].cpu().permute(1, 2, 0).numpy(),
+                                # Clamp [0,1]
+                                torch.clamp(x[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
+                                caption="Input ("+ str(fts_file[0]) +")",
                             ),
                             wandb.Image(
                                 # Clamp [0,1] model output to avoid rescaling in wandb (when predicted values are out of [0,1])
-                                torch.clamp(x_hat[0], 0, 1).cpu().permute(1, 2, 0).numpy(),
+                                torch.clamp(x_hat[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
+                                #x_hat[0].cpu().permute(1, 2, 0).numpy(),
                                 caption="Prediction",
                             ),
                             wandb.Image(
-                                diff[0].cpu().permute(1, 2, 0).numpy(),
+                                torch.clamp(diff[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
                                 caption="Difference",
                             ),
                         ],
@@ -145,7 +155,9 @@ class NCompressor(LightningModule):
     def test_step(self, batch, batch_idx):
         self.model.eval()
         images, fts_file = batch
-        x = images / 65535  # TODO: add this to dataloader
+        x = images #/ 65535  # TODO: add this to dataloader
+        if torch.any(torch.isnan(x)):
+            raise ValueError("there was nan in the x!")
         x_hat = self.model(x)["x_hat"]
         loss =  -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 

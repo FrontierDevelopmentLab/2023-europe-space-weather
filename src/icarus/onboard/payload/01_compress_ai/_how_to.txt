@@ -16,12 +16,12 @@ pip install sunpy zeep drms hvpy openvino-dev==2023.0.1 pytorch_msssim compressa
 python compress_ai_run.py
 
 ## save the model
-python openvino_save_model.py
+python openvino_save_model_512.py
+python openvino_save_model_2048.py
 
 mo --input_model ./onboard_net.onnx
 mo --input_model ./onboard_compressor_y.onnx
-mo --input_model ./onboard_entropy_bottleneck.onnx
-
+mo --input_model ./onboard_compressor_y_2048.onnx
 
 ## use the model
 
@@ -33,3 +33,4 @@ python openvino_use_model.py
 cp onboard_net* ../02_run_inside_docker/payload/
 cp onboard_compressor_y* ../02_run_inside_docker/payload/
 cp saved_entropy_bottleneck.pt ../02_run_inside_docker/payload/
+
