@@ -10,5 +10,7 @@ Lambda:
   continuity: 1.e-4
   radial_regularization: 1.e-4
   velocity_regularization: 0
+  tB: 0.
+  pB: 1.
 
 Debug: False

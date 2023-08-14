@@ -10,7 +10,7 @@ from astropy.coordinates import SkyCoord
 from sunpy.map import Map, all_coordinates_from_map
 
 
-def _loadMLprepMap(file_path, out_path, resolution, occ_rad=4 * u.R_sun):
+def _loadMLprepMap(file_path, out_path, resolution):
     """Load and preprocess OBS file.
 
 
@@ -34,15 +34,15 @@ def _loadMLprepMap(file_path, out_path, resolution, occ_rad=4 * u.R_sun):
     pixel_radii = np.sqrt((pixel_coords.Tx - solar_center.Tx) ** 2 + \
                           (pixel_coords.Ty - solar_center.Ty) ** 2)
 
-    mask = pixel_radii < s_map.rsun_obs * occ_rad.to(u.R_sun).value
+    mask = (pixel_radii <= s_map.rsun_obs * 4) | (pixel_radii >= s_map.rsun_obs * 15)
 
     # normalize image data
     data = s_map.data
     # tB: -23.63556 -15.273365; pB: -29.108622 -18.05343
-    v_min, v_max = -29, -18
+    v_min, v_max = -29, -20
     data = (np.log(data) - v_min) / (v_max - v_min)
     data = np.nan_to_num(data, nan=0)
-    data = np.clip(data, 0, 1)
+    data = np.clip(data, 0, 2)
     data = data.astype(np.float32)
 
     data[mask] = np.nan

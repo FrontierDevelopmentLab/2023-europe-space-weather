@@ -16,7 +16,7 @@ Stratified sampling:
 
 Scaling:
   vmin : -29
-  vmax : -18
+  vmax : -20
 
 Model:
   d_filter : 512          # Dimensions of linear layer filters

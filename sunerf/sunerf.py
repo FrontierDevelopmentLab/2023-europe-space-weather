@@ -30,6 +30,8 @@ class SuNeRFModule(LightningModule):
         self.lambda_continuity = self.hparams['Lambda']['continuity']
         self.lambda_radial_regularization = self.hparams['Lambda']['radial_regularization']
         self.lambda_velocity_regularization = self.hparams['Lambda']['velocity_regularization']
+        self.lambda_tB = self.hparams['Lambda']['tB']
+        self.lambda_pB = self.hparams['Lambda']['pB']
 
         self.start_iter = 0  # TODO: Update this based on loading the checkpoint
         self.n_samples_hierarchical = self.hparams['Hierarchical sampling']['n_samples_hierarchical']
@@ -96,8 +98,10 @@ class SuNeRFModule(LightningModule):
 
         # backpropagation
         pred_img = outputs['pixel_B']
-        fine_loss = torch.nn.functional.mse_loss(pred_img, target_img) # optimize fine model
-        coarse_loss = torch.nn.functional.mse_loss(outputs['pixel_B_0'], target_img)  # optimize coarse model
+        fine_loss = self.lambda_tB * torch.nn.functional.mse_loss(pred_img[..., 0], target_img[..., 0]) + \
+                    self.lambda_pB * torch.nn.functional.mse_loss(pred_img[..., 1], target_img[..., 1]) # optimize fine model
+        coarse_loss = self.lambda_tB * torch.nn.functional.mse_loss(outputs['pixel_B_0'][..., 0], target_img[..., 0]) + \
+                      self.lambda_pB * torch.nn.functional.mse_loss(outputs['pixel_B_0'][..., 0], target_img[..., 0]) # optimize coarse model
         # regularization_loss = outputs['regularization'].mean() # suppress unconstrained regions
 
         # PINN
