@@ -105,6 +105,10 @@ gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_
 
 # Download for all of the PSI Data
 gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/PSI /mnt/ground-data/PSI/
+
+# Download observational data
+gsutil -m cp -R gs://fdl_space_weather_data/events/fdl_stereo_2014_02_prep.zip /mnt/ground-data/
+
 ################
 #              #
 #  Prep Data   #
