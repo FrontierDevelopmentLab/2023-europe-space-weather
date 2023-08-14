@@ -83,7 +83,7 @@ class CMEDataset(Dataset):
             self.images.extend(
                 [
                     im
-                    for im in ds.stereo_a
+                    for im in self.stereo_a
                     if os.path.basename(os.path.dirname(im))
                     in ["0.0", "120.0", "240.0"]
                 ]
@@ -91,7 +91,7 @@ class CMEDataset(Dataset):
             self.images.extend(
                 [
                     im
-                    for im in ds.stereo_b
+                    for im in self.stereo_b
                     if os.path.basename(os.path.dirname(im))
                     in ["0.0", "120.0", "240.0"]
                 ]
