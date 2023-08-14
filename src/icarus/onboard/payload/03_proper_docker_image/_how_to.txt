@@ -1,0 +1,29 @@
+# 0 prepare
+place all model and data files into 03_proper_docker_image/payload
+	onboard_compressor_y.bin
+	onboard_compressor_y.onnx
+	onboard_compressor_y.xml
+	onboard_net.bin
+	onboard_net.onnx
+	onboard_net.xml
+	saved_entropy_bottleneck.pt
+	secchi_l0_a_seq_cor1_20120306_20120306_230000_s4c1a.fts
+using the script in 01_compress_ai/openvino_save_model.py
+
+
+# 1 build
+# needs access to > spacecloud.unibap.com/unibap/framework-missionimage:latest bash
+cd 03_proper_docker_image
+sudo docker build -t helio_payload .
+
+# 2 run commands
+# easy run
+sudo docker run -it -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw' --rm -v "/$(pwd)/payload":/payload -v "/$(pwd)/results":/results -m 2g helio_payload
+
+
+# with more details and bash
+sudo docker run -it -v /dev/bus/usb:/dev/bus/usb \
+        --device-cgroup-rule='c 189:* rmw' \
+        --rm -v "/$(pwd)/payload":/payload -v "/$(pwd)/results":/results -m 2g  \
+        helio_payload bash
+./run_all
