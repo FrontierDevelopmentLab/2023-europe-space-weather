@@ -1,0 +1,9 @@
+onboard_compressor_y.bin
+onboard_compressor_y.onnx
+onboard_compressor_y.xml
+onboard_compressor_y_2048.bin
+onboard_compressor_y_2048.onnx
+onboard_compressor_y_2048.xml
+saved_entropy_bottleneck.pt
+
+Download from https://drive.google.com/file/d/1-XBOSrQmnM6M_3l71y65a9_dB2bsCC5S/view?usp=sharing
