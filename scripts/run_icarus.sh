@@ -147,6 +147,9 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_2view_background" --data_path_pB 
 # prep_HAO_allview
 python -m sunerf.sunerf --wandb_name "hao_pinn_all" --data_path_pB "/mnt/prep-data/prep_HAO_allview/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_allview/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_allview" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
+# Prep_HAO_5view
+python -m sunerf.sunerf --wandb_name "hao_pinn_5view" --data_path_pB "/mnt/prep-data/prep_HAO_5view/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_5view/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_5view" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
 # full training PSI
 python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/prep-data/prep_PSI/pb_raw/*.fits" --data_path_tB "/mnt/prep-data/prep_PSI/b_raw/*.fits" --path_to_save "/mnt/training/PSI_v2" --train "config/train.yaml" --hyperparameters "config/hyperparams_psi.yaml"
 
