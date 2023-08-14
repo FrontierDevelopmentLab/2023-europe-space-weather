@@ -18,13 +18,11 @@ import imageio #gifs
 import logging
 import sys
 
-from scipy.spatial import ConvexHull #ConvexHull used to note the simplexes - This allows for 3D visualization of the structure!
-
 #import vtk
-import tvtk
+#import tvtk
 
 #logging.getLogger().addHandler(logging.StreamHandler(sys.stdout)) # Output to console.
-
+from scipy.stats import multivariate_normal
 
 base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 
@@ -441,7 +439,7 @@ def calculate_mean_velocity_and_density(density_cube:np.ndarray, velocity_cube:n
     
     return out_dict
 
-def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array, densities:np.ndarray, velocities:np.ndarray, positions_x:np.array, positions_y:np.array,positions_z:np.array) -> float:
+def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array, densities:np.ndarray, velocities:np.ndarray, positions_x:np.array, positions_y:np.array,positions_z:np.array) -> np.array:
     """
     This function estimates the probability of a detected CME hitting earth.
     Currently, this is a simplified model, working with a kernel density estimate for the distribution of velocity.
@@ -451,10 +449,7 @@ def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array,
     2. Calculate the KDE of direction vectors from the velocity array
     3. Use KDE to calculate the probability of the CME moving in the direction of earth - P0
     4. Move CME to next position based on velocity (new position vectors)
-    5. Assuming: no new mass has entered the CME (this is possible)
-                 velocity distribution hasn't changed (it will)
-                   recheck probability of CME hitting earth now from same CME) - P1
-    
+
 
     Args:
         earth_position (np.array): [x,y,z] - position vector of earth
@@ -472,6 +467,16 @@ def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array,
     connection_vector = positions - earth_position
     #direction vectors
     direction_vectors = np.asarray([v/np.dot(v,v) for v in connection_vector]) 
-    #direction vectors
-    mean_direction = mean_velocity/np.dot(mean_velocity,mean_velocity)
-    raise NotImplementedError
+    #direction vector for mean velocity
+    #mean_direction = mean_velocity/np.dot(mean_velocity,mean_velocity)
+    
+
+    velocity_directions = np.asarray([v/np.dot(v,v) for v in velocities])
+    #Distribution of direction vectors
+    std_dx,std_dy,std_dz = velocity_directions.std(axis = 0)
+    kernel_density_estimate = multivariate_normal(velocity_directions.mean(axis = 0), velocity_directions.std(axis = 0))
+    #Use kernel_density_estimate.cdf about regions.
+    #Calculate probability of each direction based on the standard deviation of direction vectors
+    probabilities = [kernel_density_estimate.cdf(np.asarray([vx+std_dx, vy+std_dy,vz+std_dz])) - kernel_density_estimate.cdf(np.asarray([vx-std_dx, vy-std_dy,vz-std_dz])) for vx,vy,vz in direction_vectors]
+    probabilities = np.asarray(probabilities)
+    raise probabilities
