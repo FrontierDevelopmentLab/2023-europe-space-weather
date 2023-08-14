@@ -479,4 +479,4 @@ def estimate_probability_of_hit(earth_position:np.array, mean_velocity:np.array,
     #Calculate probability of each direction based on the standard deviation of direction vectors
     probabilities = [kernel_density_estimate.cdf(np.asarray([vx+std_dx, vy+std_dy,vz+std_dz])) - kernel_density_estimate.cdf(np.asarray([vx-std_dx, vy-std_dy,vz-std_dz])) for vx,vy,vz in direction_vectors]
     probabilities = np.asarray(probabilities)
-    raise probabilities
+    return probabilities
