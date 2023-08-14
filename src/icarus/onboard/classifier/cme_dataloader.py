@@ -4,6 +4,7 @@
 
 import copy
 import json
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -13,7 +14,8 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import numpy as np
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, Dataset
+from lightning.pytorch import LightningDataModule
+from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm.auto import tqdm
 
 
@@ -59,17 +61,21 @@ def extract_images_within_time_range(events, image_paths):
 
 
 class CMEDataset(Dataset):
-    def __init__(self, root, events=[], pol="all", size=512):
+    def __init__(
+        self,
+        root,
+        events=[],
+        stereo_a_file_list=[],
+        stereo_b_file_list=[],
+        pol="all",
+        size=512,
+    ):
         self.cache_dir = os.path.join(root, ".cache")
         os.makedirs(self.cache_dir, exist_ok=True)
 
         self.events = events
-        self.stereo_a = sorted(
-            glob(os.path.join(root, "201402*", "cor1", "stereo_a", "*", "*.fts"))
-        )
-        self.stereo_b = sorted(
-            glob(os.path.join(root, "201402*", "cor1", "stereo_b", "*", "*.fts"))
-        )
+        self.stereo_a = stereo_a_file_list
+        self.stereo_b = stereo_b_file_list
 
         self.pol = pol
 
@@ -265,6 +271,151 @@ class CMEDataset(Dataset):
 
     def __len__(self):
         return len(self.images)
+
+
+class CMEDataModule(LightningDataModule):
+    """
+    CMEDataModule:
+        Class incorporating the dataloader for CMEData.
+        This class enables the use of a consistent selection of data splits, saving the precise data in its member variables.
+
+        Recommended Methods:
+            train_dataloader() -> Dataloader: Returns the dataloader for the selected training data in the module
+            test_dataloader() -> Dataloader: Returns the dataloader for the selected testing data in the module
+            val_dataloader() -> Dataloader: Returns the validation dataloader
+    """
+
+    def __init__(self, config: dict = None):
+        """__init__
+
+        Args:
+            config (dict): Dictionary encompassing the parameters passed in
+                Dictionary Keys:
+                    "Batch Size" - Default 32: Batchsize to use in the dataloaders
+                    "num workers" - Default: 4 - Number of workers for the dataset
+                    "train percentage" - Default: 0.85 - Percentage of collected data from Cor1, Cor2 to be used for training.
+                                                         Each File will have an associated integer on whether an event is present (1) or not (0)
+                    "test percentage" - Default: 0.1 - Percentage of collected data from Cor1, Cor2 to be used for testing.
+                                                      Each File will have an associated integer on whether an event is present (1) or not (0)
+                    "val percentage" - Default: 0.05 - Percentage of collected data from Cor1, Cor2 to be used for validation.
+                                                       Each File will have an associated integer on whether an event is present (1) or not (0)
+
+        """
+        super().__init__()
+        logging.info("Load data")
+
+        # TODO note previous data_loader also loaded cme label
+
+        self.config = config
+
+        self.train_pct = config["train_pct"]
+        self.valid_pct = config["valid_pct"]
+        self.test_pct = 1 - (self.train_pct + self.valid_pct)
+        if (self.train_pct + self.valid_pct + self.test_pct) != 1:
+            print("Percentages do not add to 1!")
+
+        self.num_workers = config["num_workers"]
+
+    def _get_events(self):
+        with open(self.config["events_path"], "r") as fp:
+            events = json.load(fp)
+        return events
+
+    def _get_file_lists(self):
+        root = self.config["root_path"]
+        observation_days = sorted(glob(os.path.join(root, "*")))
+        fnames_splits = random_split(
+            observation_days, [self.train_pct, self.valid_pct, self.test_pct]
+        )
+        stereo_a_splits = []
+        stereo_b_splits = []
+        for fnames in fnames_splits:
+            fname_list_a = []
+            fname_list_b = []
+            for fname in fnames:
+                fname_list_a.extend(
+                    sorted(glob(os.path.join(fname, "cor1", "stereo_a", "*", "*.fts")))
+                )
+
+                fname_list_b.extend(
+                    sorted(glob(os.path.join(fname, "cor1", "stereo_b", "*", "*.fts")))
+                )
+            stereo_a_splits.append(fname_list_a)
+            stereo_b_splits.append(fname_list_b)
+        return stereo_a_splits, stereo_b_splits
+
+    def setup(self, stage: str):
+        """setup
+        Method setting up the internals of the system
+        including loading the relevant events (events_path)
+        Dataloaders are created at the end of the method
+
+        Args:
+            stage (str): Stage for the data, encapsulating what this configuration is for - Example: Training, Testing, Validation
+                         required by pytorch lightning
+        """
+
+        events = self._get_events()
+
+        stereo_a_splits, stereo_b_splits = self._get_file_lists()
+        print("LEN train", len(stereo_a_splits[0]))
+
+        print("LEN val", len(stereo_a_splits[1]))
+
+        print("LEN test", len(stereo_a_splits[2]))
+
+        self.train_data = CMEDataset(
+            self.config["root_path"],
+            events=events,
+            stereo_a_file_list=stereo_a_splits[0],
+            stereo_b_file_list=stereo_b_splits[0],
+            pol=self.config["pol"],
+            size=self.config["image_size"],
+        )
+        self.val_data = CMEDataset(
+            self.config["root_path"],
+            events=events,
+            stereo_a_file_list=stereo_a_splits[1],
+            stereo_b_file_list=stereo_b_splits[1],
+            pol=self.config["pol"],
+            size=self.config["image_size"],
+        )
+        self.test_data = CMEDataset(
+            self.config["root_path"],
+            events=events,
+            stereo_a_file_list=stereo_a_splits[2],
+            stereo_b_file_list=stereo_b_splits[2],
+            pol=self.config["pol"],
+            size=self.config["image_size"],
+        )
+
+        print("Datasets set up")
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_data,
+            batch_size=self.config["batch_size"],
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self, num_workers=None) -> DataLoader:
+        num_workers = num_workers or self.num_workers
+        return DataLoader(
+            self.test_data,
+            batch_size=self.config["batch_size"],
+            shuffle=False,
+            num_workers=num_workers,
+        )
+
+    def test_dataloader(self, num_workers=None) -> DataLoader:
+        num_workers = num_workers or self.num_workers
+        return DataLoader(
+            self.val_data,
+            batch_size=self.config["batch_size"],
+            shuffle=True,
+            num_workers=num_workers,
+        )
 
 
 if __name__ == "__main__":

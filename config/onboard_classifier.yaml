@@ -1,10 +1,10 @@
 data_loader:
-  data_dir: /mnt/onboard_data/training_data/v1
-  input_fnames_list : /mnt/onboard_data/training_data/fnames_test100.csv
-  batch_size: 1
-  num_workers: 1
-  img_size: 2048
-
+  root_path: /mnt/onboard_data/classifier/
+  events_path: events_201402.json
+  image_size: 512
+  pol: all
+  batch_size: 4
+  num_workers: 2
   train_pct: 0.85
   valid_pct: 0.1
 
