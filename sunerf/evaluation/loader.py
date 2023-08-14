@@ -30,9 +30,13 @@ class SuNeRFLoader:
 
         encoder = PositionalEncoder(**state['encoder_kwargs'])
         self.encoding_fn = lambda x: encoder(x)
-        self.coarse_model = nn.DataParallel(state['coarse_model']).to(device)
-        self.fine_model = nn.DataParallel(state['fine_model']).to(device)
-
+        print(device)
+        if device == torch.device("cuda"): 
+            self.coarse_model = nn.DataParallel(state['coarse_model']).to(device)
+            self.fine_model = nn.DataParallel(state['fine_model']).to(device)
+        else:
+            self.coarse_model = state['coarse_model']
+            self.fine_model = state['fine_model'] 
         self.device = device
 
     def load_observer_image(self, lat: float, lon: float, time: datetime,
