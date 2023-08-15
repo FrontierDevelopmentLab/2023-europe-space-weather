@@ -22,6 +22,7 @@ from torchmetrics import Accuracy
 torch.multiprocessing.set_sharing_strategy("file_system")
 import json
 
+from cme_dataloader import CMEDataModule
 from lightning.pytorch import (
     LightningDataModule,
     LightningModule,
@@ -39,9 +40,9 @@ from lightning.pytorch.tuner.tuning import Tuner
 
 import wandb
 
-from ..data_loader import (  # This is just a place holder for the CME data_loader
-    FitsDataModule,
-)
+# from ..data_loader import (  # This is just a place holder for the CME data_loader
+#    FitsDataModule,
+# )
 
 
 class CME_classifier(LightningModule):
@@ -87,7 +88,10 @@ class CME_classifier(LightningModule):
         return self.model.forward(x)
 
     def training_step(self, batch, batch_idx):
-        images, y_target, fts_file = batch
+        images, y_target = batch
+        images = (
+            images.unsqueeze(1).repeat(1, 3, 1, 1).float()
+        )  # TODO: add this to dataloader
         x = images / 65535  # TODO: add this to dataloader
         y = self.forward(x).flatten()
 
@@ -110,7 +114,10 @@ class CME_classifier(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         self.model.eval()
-        images, y_target, fts_file = batch
+        images, y_target = batch
+        images = (
+            images.unsqueeze(1).repeat(1, 3, 1, 1).float()
+        )  # TODO: add this to dataloader
         x = images / 65535  # TODO: add this to dataloader
         y = self.forward(x).flatten()
 
@@ -122,13 +129,24 @@ class CME_classifier(LightningModule):
         self.log(
             "val/loss", loss, prog_bar=True, sync_dist=True, batch_size=self.batch_size
         )
-        # ToDo: add prediction visualisation
+        if batch_idx == self.validation_batch_index:
+            x_vis = (x[0, 0] - x[0, 0].min()) / (x[0, 0].max() - x[0, 0].min())
+            table = wandb.Table(
+                columns=["Observation_image", "Predicted_label", "Ground truth label"]
+            )
+            img = wandb.Image(x_vis.cpu().numpy())
+            table.add_data(img, torch.nn.functional.sigmoid(y[0]), y_target[0])
+            wandb.log({"Table": table})
 
         return loss
 
     def test_step(self, batch, batch_idx):
         self.model.eval()
-        images, y_target, fts_file = batch
+        images, y_target = batch
+        images = (
+            images.unsqueeze(1).repeat(1, 3, 1, 1).float()
+        )  # TODO: add this to dataloader
+
         x = images / 65535  # TODO: add this to dataloader
         y = self.forward(x).flatten()
 
@@ -211,7 +229,9 @@ if __name__ == "__main__":
         entity="ssa_live_twin",
         config=config,
         mode=config["train"]["wandb_mode"],
-        name=config["train"]["run_id"],
+        name=config["train"][
+            "run_id"
+        ],  # ToDo: This doesn't work for more than 1 batch size
     )
     wandb_logger = WandbLogger()
 
@@ -256,7 +276,9 @@ if __name__ == "__main__":
     else:
         ckpt_path = None
 
-    dm = FitsDataModule(wandb.config.data_loader)
+    # dm = FitsDataModule(wandb.config.data_loader)
+
+    dm = CMEDataModule(wandb.config.data_loader)
 
     trainer = Trainer(
         max_epochs=wandb.config.train["nepochs"],
