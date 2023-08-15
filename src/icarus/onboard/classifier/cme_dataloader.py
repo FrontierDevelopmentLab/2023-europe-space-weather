@@ -19,6 +19,65 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm.auto import tqdm
 
 
+def get_events(verbose=False):
+    """
+    merge catalogues of events to get start and end times of cmes for labelling
+
+    for each event in cor1 data set, look for closest event in cor2 data set
+    if none close enough [3 hours] then cut end time to 3 hours
+    """
+
+    # from event scraper of:
+    # https://cor1.gsfc.nasa.gov/catalog/cme/2014/Daniel_Hong_COR1_preliminary_event_list_2014-02.html
+    with open("events_201402.json", "r") as fp:
+        events_cor1 = json.load(fp)
+
+    # from event scraper of:
+    # http://spaceweather.gmu.edu/seeds/monthly.php?a=2014&b=02&cor2
+    with open("events_201402cor2.json", "r") as fp:
+        events_cor2 = json.load(fp)
+
+    events = events_cor1.copy()
+
+    date_format = "%Y%m%d_%H%M%S"
+
+    for sat in ["stereo_a", "stereo_b"]:
+        idxs = []
+
+        cor2_starts = [
+            datetime.strptime(i["event_start_time"], date_format)
+            for i in events_cor2[sat]
+        ]
+
+        for cor1_event in events[sat]:
+            cor1_start = datetime.strptime(cor1_event["event_start_time"], date_format)
+            closest_cor2 = min(cor2_starts, key=lambda d: abs(d - cor1_start))
+            # if no close match, auto restrict end to 3 hours ahead
+            if abs(closest_cor2 - cor1_start) > timedelta(hours=3):
+                if verbose:
+                    print("no match")
+                cor1_event["event_stop_time"] = (
+                    cor1_start + timedelta(hours=3)
+                ).strftime(date_format)
+
+            # if close event match, use cor2 catalogue end time
+            else:
+                # if event already used don't use again?
+                cor2_event_idx = cor2_starts.index(closest_cor2)
+                if cor2_event_idx in idxs:
+                    if verbose:
+                        print(
+                            "Cor2 event already associated to previous cor1 event:",
+                            abs(closest_cor2 - cor1_start),
+                        )
+                idxs.append(cor2_event_idx)
+
+                cor2_event = events_cor2[sat][cor2_event_idx]
+                cor1_event["event_stop_time"] = cor2_event["event_stop_time"]
+
+        return events
+
+
 def extract_images_within_time_range(events, image_paths):
     selected_images = []
 
@@ -317,8 +376,9 @@ class CMEDataModule(LightningDataModule):
         self.num_workers = config["num_workers"]
 
     def _get_events(self):
-        with open(self.config["events_path"], "r") as fp:
-            events = json.load(fp)
+        events = get_events()
+        # with open(self.config["events_path"], "r") as fp:
+        #    events = json.load(fp)
         return events
 
     def _get_file_lists(self):
@@ -419,10 +479,7 @@ class CMEDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    # from event scraper of:
-    # https://cor1.gsfc.nasa.gov/catalog/cme/2014/Daniel_Hong_COR1_preliminary_event_list_2014-02.html
-    with open("events_201402.json", "r") as fp:
-        events = json.load(fp)
+    events = get_events()
 
     # 7 mins without cache, 2-3 with cache
     ds = CMEDataset(root="/mnt/onboard_data/classifier", pol="all", events=events)
