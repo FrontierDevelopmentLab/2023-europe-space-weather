@@ -129,7 +129,14 @@ class CME_classifier(LightningModule):
         self.log(
             "val/loss", loss, prog_bar=True, sync_dist=True, batch_size=self.batch_size
         )
-        # ToDo: add prediction visualisation
+        if batch_idx == self.validation_batch_index:
+            x_vis = (x[0, 0] - x[0, 0].min()) / (x[0, 0].max() - x[0, 0].min())
+            table = wandb.Table(
+                columns=["Observation_image", "Predicted_label", "Ground truth label"]
+            )
+            img = wandb.Image(x_vis.cpu().numpy())
+            table.add_data(img, torch.nn.functional.sigmoid(y[0]), y_target[0])
+            wandb.log({"Table": table})
 
         return loss
 
@@ -222,7 +229,9 @@ if __name__ == "__main__":
         entity="ssa_live_twin",
         config=config,
         mode=config["train"]["wandb_mode"],
-        name=config["train"]["run_id"],
+        name=config["train"][
+            "run_id"
+        ],  # ToDo: This doesn't work for more than 1 batch size
     )
     wandb_logger = WandbLogger()
 

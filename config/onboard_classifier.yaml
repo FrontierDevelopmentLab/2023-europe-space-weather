@@ -3,8 +3,8 @@ data_loader:
   events_path: events_201402.json
   image_size: 512
   pol: all
-  batch_size: 4
-  num_workers: 2
+  batch_size: 1
+  num_workers: 1
   train_pct: 0.85
   valid_pct: 0.1
 
@@ -16,7 +16,7 @@ train:
    ckpt_dir: /mnt/training_classifier/<run_id>/checkpoints/
    out_dir: /mnt/training_classifier/<run_id>/
 
-   wandb_mode: offline # online or offline or disabled
+   wandb_mode: online # online or offline or disabled
 
    resume_from_checkpoint: False
    ckpt_path: last # path or "last"
