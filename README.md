@@ -121,12 +121,17 @@ git clone https://github.com/FrontierDevelopmentLab/2023-europe-space-weather.gi
 
 ### Download training data
 
+Follow commands in `scripts/run_icarus.sh` to download data to `~/mnt` instead of `/mnt`.
+
+Note: No permission to modify `/mnt`.
+
 ```bash
 mkdir ~/mnt
 mkdir ~/mnt/ground-data
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits ~/mnt/ground-data/
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/PSI ~/mnt/ground-data/
+gsutil -m cp -R gs://fdl_space_weather_data/events/fdl_stereo_2014_02_prep.zip ~/mnt/ground-data/
 ```
-Follow commands in `scripts/run_icarus.sh` to download data to `~/mnt` instead of `/mnt`.
-Note: No permission to modify `/mnt`.
 
 ### Screen session (optional)
 
@@ -137,7 +142,7 @@ screen
 
 ### Docker
 
-Download the PyTorch Docker image.
+Download the [PyTorch Docker image](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch).
 ```bash
 docker pull nvcr.io/nvidia/pytorch:22.01-py3
 ```
@@ -151,3 +156,22 @@ Inside the docker container, install the requirements.
 ```bash
 pip install -r requirements.txt
 ```
+
+### Data prep
+
+Unzip the zip file.
+```bash
+python
+```
+
+```python
+import zipfile
+
+path_to_zip_file = "/mnt/ground-data/fdl_stereo_2014_02_prep.zip"
+directory_to_extract_to = "/mnt/ground-data/data_fits_stereo_2014_02"
+
+with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
+    zip_ref.extractall(directory_to_extract_to)
+```
+
+Follow commands in `scripts/run_icarus.sh` to prep data in `/mnt/prep-data`.
