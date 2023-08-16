@@ -91,8 +91,8 @@ class CME_classifier(LightningModule):
         images, y_target = batch
         images = (
             images.unsqueeze(1).repeat(1, 3, 1, 1).float()
-        )  # TODO: add this to dataloader
-        x = images / 65535  # TODO: add this to dataloader
+        )
+        x = images
         y = self.forward(x).flatten()
 
         y_target = y_target.float()
@@ -117,8 +117,8 @@ class CME_classifier(LightningModule):
         images, y_target = batch
         images = (
             images.unsqueeze(1).repeat(1, 3, 1, 1).float()
-        )  # TODO: add this to dataloader
-        x = images / 65535  # TODO: add this to dataloader
+        )
+        x = images
         y = self.forward(x).flatten()
 
         y_target = y_target.float()
@@ -145,9 +145,9 @@ class CME_classifier(LightningModule):
         images, y_target = batch
         images = (
             images.unsqueeze(1).repeat(1, 3, 1, 1).float()
-        )  # TODO: add this to dataloader
+        )
 
-        x = images / 65535  # TODO: add this to dataloader
+        x = images
         y = self.forward(x).flatten()
 
         y_target = y_target.float()
@@ -300,3 +300,5 @@ if __name__ == "__main__":
     # out_dir = config["train"]["out_dir"]
 
     wandb.finish()
+
+

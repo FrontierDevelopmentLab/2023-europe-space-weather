@@ -139,10 +139,11 @@ class CMEDataset(Dataset):
         self.pol = pol
 
         self.images = []
-
+        
+        self.mean = 0
+        self.std = 512
+        
         if pol == "all":
-            self.mean = 2691.3037070368546
-            self.std = 2579.566574917962
             # self.images.extend([im for im in self.stereo_a if os.path.basename(os.path.dirname(im)) != '1001.0'])
             # self.images.extend([im for im in self.stereo_b if os.path.basename(os.path.dirname(im)) != '1001.0'])
             self.images.extend(
@@ -164,12 +165,7 @@ class CMEDataset(Dataset):
         elif pol == "sum":
             self.images.extend([im for im in self.stereo_a if "n4" in im])
             self.images.extend([im for im in self.stereo_b if "n4" in im])
-            self.mean = 3658.224788149089
-            self.std = 3399.0258091444553
         else:
-            self.mean = 2691.3037070368546
-            self.std = 2579.566574917962
-
             self.images.extend(
                 [
                     im
@@ -326,7 +322,7 @@ class CMEDataset(Dataset):
         data = self._get_difference_image(i)
         label = int(self.images[i] in self.cme_images)
 
-        return data, label  # self.transform(data), label
+        return self.transform(data), label
 
     def __len__(self):
         return len(self.images)
