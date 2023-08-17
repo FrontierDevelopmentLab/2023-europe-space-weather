@@ -3,8 +3,8 @@ data_loader:
   events_path: events_201402.json
   image_size: 512
   pol: all
-  batch_size: 1
-  num_workers: 1
+  batch_size: 64
+  num_workers: 32
   train_pct: 0.85
   valid_pct: 0.1
 
@@ -28,4 +28,4 @@ train:
    loss: bce
    nepochs: 100
    log_every_n_steps: 1
-   log_ckpt_every_n_steps: 1 # 10
+   log_ckpt_every_n_epochs: 1 # 10
