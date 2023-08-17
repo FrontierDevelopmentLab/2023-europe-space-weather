@@ -113,45 +113,41 @@ class SuNeRFModule(LightningModule):
         electron_density = raw[..., 0]
         velocity = raw[..., 1:]
 
-        output_vector = torch.cat([electron_density[..., None], velocity], -1)
+        output_vector = torch.cat([torch.log(electron_density[..., None]), electron_density[..., None] * velocity], -1)
         jac_matrix = jacobian(output_vector, query_points)
 
-        dNe_dx = jac_matrix[:, 0, 0]
-        dVx_dx = jac_matrix[:, 1, 0]
-        dVy_dx = jac_matrix[:, 2, 0]
-        dVz_dx = jac_matrix[:, 3, 0]
+        dlogNe_dx = jac_matrix[:, 0, 0]
+        dNeVx_dx = jac_matrix[:, 1, 0]
+        dNeVy_dx = jac_matrix[:, 2, 0]
+        dNeVz_dx = jac_matrix[:, 3, 0]
 
-        dNe_dy = jac_matrix[:, 0, 1]
-        dVx_dy = jac_matrix[:, 1, 1]
-        dVy_dy = jac_matrix[:, 2, 1]
-        dVz_dy = jac_matrix[:, 3, 1]
+        dlogNe_dy = jac_matrix[:, 0, 1]
+        dNeVx_dy = jac_matrix[:, 1, 1]
+        dNeVy_dy = jac_matrix[:, 2, 1]
+        dNeVz_dy = jac_matrix[:, 3, 1]
 
-        dNe_dz = jac_matrix[:, 0, 2]
-        dVx_dz = jac_matrix[:, 1, 2]
-        dVy_dz = jac_matrix[:, 2, 2]
-        dVz_dz = jac_matrix[:, 3, 2]
+        dlogNe_dz = jac_matrix[:, 0, 2]
+        dNeVx_dz = jac_matrix[:, 1, 2]
+        dNeVy_dz = jac_matrix[:, 2, 2]
+        dNeVz_dz = jac_matrix[:, 3, 2]
 
-        dNe_dt = jac_matrix[:, 0, 3]
-        dVx_dt = jac_matrix[:, 1, 3]
-        dVy_dt = jac_matrix[:, 2, 3]
-        dVz_dt = jac_matrix[:, 3, 3]
-        
-        continuity_loss = dNe_dt + electron_density * (dVx_dx + dVy_dy + dVz_dz) + (torch.stack([dNe_dx, dNe_dy, dNe_dz], -1) * velocity).sum(-1)
-        continuity_loss = (torch.abs(continuity_loss) / (electron_density + 1e-8)).mean()
+        dlogNe_dt = jac_matrix[:, 0, 3]
+        dNeVx_dt = jac_matrix[:, 1, 3]
+        dNeVy_dt = jac_matrix[:, 2, 3]
+        dNeVz_dt = jac_matrix[:, 3, 3]
+
+        continuity_loss = dlogNe_dt + torch.true_divide(dNeVx_dx + dNeVy_dy + dNeVz_dz, electron_density)
+        continuity_loss = torch.abs(continuity_loss).mean()
 
         # regularize vectors to point radially outwards
         radial_regularization_loss = velocity / (torch.norm(velocity, dim=-1, keepdim=True) + 1e-8) - query_points[..., :3] / (torch.norm(query_points[..., :3], dim=-1, keepdim=True) + 1e-8)
         radial_regularization_loss = (torch.norm(radial_regularization_loss, dim=-1) ** 2).mean()
 
         # regularize velocity
-        velocity_regularization_target = 3 # Solar Radii per 2 days
-        velocity_regularization_loss = ((torch.norm(velocity, dim=-1) - velocity_regularization_target).abs()).mean() / 300
-
+        velocity_regularization_target = 500 # Solar Radii per 10 days, only make sure that minimum velocity is reached
+        velocity_regularization_loss = torch.relu(velocity_regularization_target - torch.norm(velocity, dim=-1)).abs().mean() / velocity_regularization_target
 
         loss = fine_loss + coarse_loss + self.lambda_continuity * continuity_loss + self.lambda_radial_regularization * radial_regularization_loss + self.lambda_velocity_regularization * velocity_regularization_loss
-        
-        formatted_loss_logstring = "="*25 + "\n Regularization and continuity" "\n \t Continuity Loss: {}".format(continuity_loss)+"\n \t Radial Regularization Loss: {}".format(radial_regularization_loss) +"\n \t Velocity Regularization Loss: {}".format(radial_regularization_loss)+"\n Model Losses" + "\n \t Fine Model Loss: {}".format(fine_loss) + "\n \t Coarse Model Loss: {} \n \n \t Complete Loss: {} \n".format(coarse_loss, loss) + "="*25
-        # print(formatted_loss_logstring)
 
         with torch.no_grad():
             psnr = -10. * torch.log10(fine_loss)

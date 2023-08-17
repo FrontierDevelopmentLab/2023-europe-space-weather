@@ -4,13 +4,13 @@ Training:
   batch_size: 1024                                        # number of rays per gradient step (power of 2)
   points_batch_size: 1024                                 # number of points per gradient step (power of 2)
   num_workers: 32                                         # number of workers for data loading
-  log_every_n_steps: 1000                                 # log images and save states between epochs
+  log_every_n_steps: 500                                 # log images and save states between epochs
 
 Lambda:
-  continuity: 1.e-4
-  radial_regularization: 1.e-4
-  velocity_regularization: 0
+  continuity: 1.e-3
+  radial_regularization: 1.e-2
+  velocity_regularization: 1.e-2
   tB: 0.
-  pB: 1.
+  pB: 10.
 
 Debug: False

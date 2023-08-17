@@ -3,6 +3,8 @@ import logging
 import multiprocessing
 import os
 from datetime import datetime, timedelta
+from itertools import repeat
+
 from tqdm import tqdm
 
 import numpy as np
@@ -110,7 +112,7 @@ class NeRFDataModule(LightningDataModule):
         logging.info('Create data sets')
         self.valid_data = BatchesDataset(self.valid_rays, self.valid_times, self.valid_images)
         self.train_data = NumpyFilesDataset(self.train_rays, self.train_times, self.train_images)
-        self.points_data = RandomCoordinateDataset([21, 200], [np.min(times), np.max(times)], self.points_batch_size)
+        self.points_data = RandomCoordinateDataset([hparams['Stratified sampling']['inner'], hparams['Stratified sampling']['outer']], [np.min(times), np.max(times)], self.points_batch_size)
 
     def _flatten_data(self, rays, times, images):
         flat_rays = np.concatenate(rays)
@@ -172,8 +174,8 @@ def get_data(config_data):
         s_maps_tB = s_maps_tB[::10]
 
     with multiprocessing.Pool(os.cpu_count()) as p:
-        data_pB = [d for d in tqdm(p.imap(_load_map_data, s_maps_pB), total=len(s_maps_pB))]
-        data_tB = [d for d in tqdm(p.imap(_load_map_data, s_maps_tB), total=len(s_maps_tB))]
+        data_pB = p.starmap(_load_map_data, zip(s_maps_pB, repeat(config_data['Coordinate system'])))
+        data_tB = p.starmap(_load_map_data, zip(s_maps_tB, repeat(config_data['Coordinate system'])))
     
     _, poses, rays, times, focal_lengths = list(map(list, zip(*data_tB)))
 
@@ -183,7 +185,7 @@ def get_data(config_data):
     return images, poses, rays, times, focal_lengths, ref_wavelength
 
 
-def _load_map_data(map_path):
+def _load_map_data(map_path, coordinate_system):
     simplefilter('ignore')
     s_map = Map(map_path)
     # s_map = s_map.rotate(recenter=True, order=3)
@@ -194,10 +196,16 @@ def _load_map_data(map_path):
 
     time = normalize_datetime(s_map.date.datetime)
 
-    print('COORDS', s_map.heliographic_longitude, s_map.heliographic_latitude)
-    pose = pose_spherical(-s_map.heliographic_longitude.to(u.deg).value,
-                          s_map.heliographic_latitude.to(u.deg).value,
-                          s_map.dsun.to(u.solRad).value).float().numpy()
+    if coordinate_system == 'heliographic':
+        pose = pose_spherical(-s_map.heliographic_longitude.to(u.deg).value,
+                              s_map.heliographic_latitude.to(u.deg).value,
+                              s_map.dsun.to(u.solRad).value).float().numpy()
+    elif coordinate_system == 'carrington':
+        pose = pose_spherical(-s_map.carrington_longitude.to(u.deg).value,
+                              s_map.carrington_latitude.to(u.deg).value,
+                              s_map.dsun.to(u.solRad).value).float().numpy()
+    else:
+        raise NotImplementedError(f'Coordinate system {coordinate_system} not implemented')
 
     image = s_map.data.astype(np.float32)
     all_rays = np.stack(get_rays(image.shape[0], image.shape[1], s_map.reference_pixel, focal, pose), -2)
@@ -212,7 +220,7 @@ def _load_map_data(map_path):
     return image, pose, all_rays, time, focal
 
 
-def normalize_datetime(date, max_time_range=timedelta(days=2)):
+def normalize_datetime(date, max_time_range=timedelta(days=10)):
     """Normalizes datetime object for ML input.
 
     Time starts at 2010-01-01 with max time range == 2 pi
@@ -228,7 +236,7 @@ def normalize_datetime(date, max_time_range=timedelta(days=2)):
     return (date - datetime(2010, 1, 1)) / max_time_range * (2 * np.pi)
 
 
-def unnormalize_datetime(norm_date: float) -> datetime:
+def unnormalize_datetime(norm_date: float, max_time_range=timedelta(days=10)) -> datetime:
     """Computes the actual datetime from a normalized date.
 
     Parameters
@@ -239,7 +247,7 @@ def unnormalize_datetime(norm_date: float) -> datetime:
     -------
     real datetime
     """
-    return norm_date * timedelta(days=2) / (2 * np.pi) + datetime(2010, 1, 1)
+    return norm_date * max_time_range / (2 * np.pi) + datetime(2010, 1, 1)
 
 
 class RandomCoordinateDataset(Dataset):

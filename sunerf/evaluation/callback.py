@@ -88,7 +88,7 @@ def log_overview(images, poses, times, cmap):
     iter_list = list(enumerate(images))
     step = max(1, len(iter_list) // 50)
     for i, img in iter_list[::step]:
-        fig = plt.figure(figsize=(16, 8), dpi=150)
+        fig = plt.figure(figsize=(8, 4), dpi=100)
         ax = plt.subplot(131, projection='3d')
         # plot all viewpoints
         _ = ax.quiver(
@@ -128,6 +128,7 @@ def log_overview(images, poses, times, cmap):
         ax.set_axis_off()
         ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
 
+        fig.tight_layout()
         wandb.log({'Overview': fig}, step=i)
         plt.close(fig)
 

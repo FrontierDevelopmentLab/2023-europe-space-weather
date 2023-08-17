@@ -24,8 +24,8 @@ import glob
 
 import torch
 
-chk_path = '/mnt/ground-data/training/HAO_v2/save_state.snf'
-video_path = '/mnt/ground-data/training/plotting/video_cme'
+chk_path = '/mnt/training/OBS_v4/save_state.snf'
+video_path = '/mnt/training/OBS_v4/video_cme'
 
 os.makedirs(video_path, exist_ok=True)
 
@@ -37,7 +37,7 @@ cmap.set_bad(color='black') # green
 time = loader.start_time + timedelta(days=0.7)
 
 au = (1 * u.AU).to(u.solRad).value
-n_points = 40
+n_points = 10
 
 # start from vigil - let errupt
 points_1 = zip(np.ones(n_points) * 0,
@@ -59,18 +59,18 @@ points_3 = zip(np.ones(n_points) * 0,
 
 
 # combine coordinates
-points = [] #list(points_1) + list(points_2) + list(points_3)
+points = list(points_1) + list(points_2) + list(points_3)
 strides = 1
 
 # manually add mask base on target example image
-mask = np.isnan(Map('/mnt/ground-data/prep_HAO/dcmer_020W_bang_0000_pB_stepnum_005.fits').data)
-mask = mask[::strides, ::strides]
+# mask = np.isnan(Map('/mnt/ground-data/prep_HAO/dcmer_020W_bang_0000_pB_stepnum_005.fits').data)
+# mask = mask[::strides, ::strides]
 
 for i, (lat, lon, time, d) in tqdm(list(enumerate(points)), total=len(points)):
-    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=4096 * torch.cuda.device_count(), strides=strides)
+    outputs = loader.load_observer_image(lat, lon, time, distance=d, batch_size=1024 * torch.cuda.device_count(), strides=strides)
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-    outputs['pixel_B'][mask] = np.nan
-    outputs['density_map'][mask] = np.nan
+    # outputs['pixel_B'][mask] = np.nan
+    # outputs['density_map'][mask] = np.nan
     axs[0].imshow(outputs['pixel_B'][..., 0], cmap=cmap, vmin=0, vmax=1, origin='lower')
     axs[1].imshow(outputs['pixel_B'][..., 1], cmap=cmap, vmin=0, vmax=1, origin='lower')
     axs[2].imshow(outputs['density_map'], cmap='viridis', origin='lower')

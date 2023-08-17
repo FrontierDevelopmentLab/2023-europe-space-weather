@@ -78,8 +78,11 @@ class NeRF(nn.Module):
             # Simple output
             x = self.output(x)
         
-        electron_density = 10 ** (15 + x[..., 0:1])
-        velocity = torch.tanh(x[..., 1:]) / 3 * 250 + 50 # normalize vector-norm to 50 - 150 solar radii/ 2 days
+        electron_density = 10 ** (20 + torch.tanh(x[..., 0:1]) * 10)
+        velocity = torch.tanh(x[..., 1:]) * 3e3  # maximum about 3000 km/s
+        # 1 second = 1.1574e-5 days
+        # 1 km = 1.4374e-6 Rsun
+        # 1 km / s = 0.12419215483 Rsun / days = 1.2419215483 Rsun / (10 days)
 
         return torch.cat([electron_density, velocity], -1)
 
@@ -246,6 +249,6 @@ def init_models(
         )
         model_params = model_params + list(fine_model.parameters())
     else:
-        fine_model = None
+        fine_model = coarse_model
 
     return coarse_model, fine_model, encode, model_params

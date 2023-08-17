@@ -10,13 +10,17 @@ Stratified sampling:
   perturb : True                  # If set, applies noise to sample positions
   near : -15
   far : 15
+  inner: 4
+  outer: 22
   non_uniform_sampling: False      # Switch between the radial sampling in which near and far are radial distances (False)
   grid_exponent : 7               # Exponent that defines how packed the grid is closer to the Sun in non-uniform sampling
   # and the box sampling with more points close to the solar surface (True)
 
 Scaling:
   vmin : -29
-  vmax : -20
+  vmax : -18
+
+Coordinate system: 'heliographic' # 'heliographic' or 'carrington'
 
 Model:
   d_filter : 512          # Dimensions of linear layer filters
@@ -32,4 +36,4 @@ Hierarchical sampling:
   perturb_hierarchical : False  # If set, applies noise to sample positions
 
 Optimizer:
-  lr : 1e-4 # Learning rate
+  lr : 5e-4 # Learning rate

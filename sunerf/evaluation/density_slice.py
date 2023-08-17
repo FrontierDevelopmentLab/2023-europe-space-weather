@@ -11,7 +11,7 @@ from tqdm import tqdm
 from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 
-base_path = '/mnt/ground-data/training/HAO_pinn_allviewpoint'
+base_path = '/mnt/training/OBS_v6'
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_density')
 
@@ -22,17 +22,15 @@ os.makedirs(video_path_dens, exist_ok=True)
 
 densities = []
 for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time, n_points)), total=n_points):
-    # TEST FOR KNOWN LOCATION
-    lati = 0
-    loni = 272.686
-    di = 214.61000061  # (* u.m).to(u.solRad).value
-
     # DENSITY SLICE
     time = normalize_datetime(timei)
 
-    query_points_npy = np.stack(np.mgrid[-100:100, -100:100, 0:1, 1:2], -1).astype(np.float32)
+    query_points_npy = np.stack(np.meshgrid(np.linspace(-15, 15, 100),
+                                            np.linspace(-15, 15, 100),
+                                            np.zeros((1,)), np.ones((1,)),
+                                            indexing='ij'), -1).astype(np.float32)
 
-    mask = np.sqrt(np.sum(query_points_npy[:, :, 0, 0, :2] ** 2, axis=-1)) < 21
+    mask = np.sqrt(np.sum(query_points_npy[:, :, 0, 0, :3] ** 2, axis=-1)) < 4
 
     query_points = torch.from_numpy(query_points_npy)
     query_points[..., -1] = time
@@ -46,7 +44,6 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
 
     density = density.view(query_points_npy.shape[:2]).cpu().detach().numpy()
     velocity = velocity.view(query_points_npy.shape[:2] + velocity.shape[-1:]).cpu().detach().numpy()
-    velocity = velocity / 10 #* density[..., None] / 1e27 # scale to mass flux
     # apply mask
     density[mask] = np.nan
     velocity[mask] = np.nan
@@ -54,13 +51,13 @@ for i, timei in tqdm(enumerate(pd.date_range(loader.start_time, loader.end_time,
     densities += [density]
 
     fig = plt.figure()
-    im = plt.imshow(density, norm='log', vmin=4e24, vmax=8e26, extent=[-100, 100, -100, 100], cmap='inferno')
+    im = plt.imshow(density, norm='log', vmin=1e18, vmax=1e22, cmap='inferno', extent=[-15, 15, -15, 15])
     # overlay velocity vectors
     quiver_pos = block_reduce(query_points_npy, (4, 4, 1, 1, 1), np.mean)
     quiver_vel = block_reduce(velocity, (4, 4, 1), np.mean)
     plt.quiver(quiver_pos[:, :, 0, 0, 0], quiver_pos[:, :, 0, 0, 1],
                quiver_vel[:, :, 0], quiver_vel[:, :, 1],
-               scale=5, color='white')
+               scale=10000, color='white')
     plt.colorbar(im, label='$N_e$')
     plt.axis('off')
     fig.savefig(os.path.join(video_path_dens, f'dens_slice_{i:03d}.jpg'), dpi=100)
