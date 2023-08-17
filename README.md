@@ -90,3 +90,88 @@ python -m pytest test
 Dependencies are specified in the `pyproject` file. Only add dependencies which are required by the project to avoid bloated environments. Add _universal_ dependencies (like Pytorch) in the `[project]` section.
 
 Add optional dependencies for the different toolsets in `[project.optional-dependencies]`.
+
+## Set up training on ScanAI
+
+### Log in to Scan
+
+Download and install [openvpn](https://openvpn.net/client/).
+
+Prepare `fdl.ovpn` config file.
+
+Start openvpn client with the config file. (linux)
+```bash
+sudo openvpn --config fdl.ovpn
+```
+
+```bash
+ssh fdl@172.18.2.20
+```
+Enter the password.
+
+### Clone git repo
+
+Once logged in, the username is `fdl` by default.
+
+```bash
+mkdir workspace
+cd workspace
+git clone https://github.com/FrontierDevelopmentLab/2023-europe-space-weather.git
+```
+
+### Download training data
+
+Follow commands in `scripts/run_icarus.sh` to download data to `~/mnt` instead of `/mnt`.
+
+Note: No permission to modify `/mnt`.
+
+```bash
+mkdir ~/mnt
+mkdir ~/mnt/ground-data
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits ~/mnt/ground-data/
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/PSI ~/mnt/ground-data/
+gsutil -m cp -R gs://fdl_space_weather_data/events/fdl_stereo_2014_02_prep.zip ~/mnt/ground-data/
+```
+
+### Screen session (optional)
+
+Start a screen session before running a docker container.
+```bash
+screen
+```
+
+### Docker
+
+Download the [PyTorch Docker image](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch).
+```bash
+docker pull nvcr.io/nvidia/pytorch:22.01-py3
+```
+
+Run a Docker container from the image above and mount the appropriate volumes.
+```bash
+docker run -v /home/fdl/workspace/2023-europe-space-weather/:/workspace/2023-europe-space-weather/ -v /home/fdl/mnt:/mnt --gpus all -it --rm nvcr.io/nvidia/pytorch:22.01-py3
+```
+
+Inside the docker container, install the requirements.
+```bash
+pip install -r requirements.txt
+```
+
+### Data prep
+
+Unzip the zip file.
+```bash
+python
+```
+
+```python
+import zipfile
+
+path_to_zip_file = "/mnt/ground-data/fdl_stereo_2014_02_prep.zip"
+directory_to_extract_to = "/mnt/ground-data/data_fits_stereo_2014_02"
+
+with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
+    zip_ref.extractall(directory_to_extract_to)
+```
+
+Follow commands in `scripts/run_icarus.sh` to prep data in `/mnt/prep-data`.

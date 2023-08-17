@@ -22,6 +22,13 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_pB/*.fits" --output_path /mnt/prep-data/prep_HAO_2view_background
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_tB/*.fits" --output_path /mnt/prep-data/prep_HAO_2view_background
 
+# Prep 5view
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_340W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_280W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_220W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_100W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/dcmer_040W_bang_0000_*B/*.fits" --output_path /mnt/prep-data/prep_HAO_5view --check_matching
+
 python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/data_fits/*_bang_0000_*/stepnum_005.fits" --output_path /mnt/prep-data/prep_HAO_2view_background --check_matching
 
 #####################################
@@ -31,7 +38,7 @@ python -m sunerf.prep.prep_hao --resolution 512 --hao_path "/mnt/ground-data/dat
 #####################################
 
 # Download all viewpoints first into data_fits subdirectory, then download all 005.step files as well.
-gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits /mnt/ground-data/data_fits
+gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/data_fits /mnt/ground-data/
 
 # Download 2 Viewpoints only into data_fits directory, emulating L5 and Earth (60° Diff) /mnt/ground-data/data_fits
 gsutil -m cp -R  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_340W_bang_0000_tB /mnt/ground-data/data_fits/
@@ -98,6 +105,10 @@ gsutil -m cp  gs://fdl23_europe_helio_onground/ground-data/data_fits/dcmer_360W_
 
 # Download for all of the PSI Data
 gsutil -m cp -R gs://fdl23_europe_helio_onground/ground-data/PSI /mnt/ground-data/PSI/
+
+# Download observational data
+gsutil -m cp -R gs://fdl_space_weather_data/events/fdl_stereo_2014_02_prep.zip /mnt/ground-data/
+
 ################
 #              #
 #  Prep Data   #
@@ -135,6 +146,9 @@ python -m sunerf.sunerf --wandb_name "hao_pinn_2view" --data_path_pB "/mnt/prep-
 python -m sunerf.sunerf --wandb_name "hao_pinn_2view_background" --data_path_pB "/mnt/prep-data/prep_HAO_2view_background/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_2view_background/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_2view_background" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 # prep_HAO_allview
 python -m sunerf.sunerf --wandb_name "hao_pinn_all" --data_path_pB "/mnt/prep-data/prep_HAO_allview/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_allview/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_allview" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
+
+# Prep_HAO_5view
+python -m sunerf.sunerf --wandb_name "hao_pinn_5view" --data_path_pB "/mnt/prep-data/prep_HAO_5view/*pB*.fits" --data_path_tB "/mnt/prep-data/prep_HAO_5view/*tB*.fits" --path_to_save "/mnt/training/HAO_pinn_5view" --train "config/train.yaml" --hyperparameters "config/hyperparams_hao.yaml"
 
 # full training PSI
 python -m sunerf.sunerf --wandb_name "psi" --data_path_pB "/mnt/prep-data/prep_PSI/pb_raw/*.fits" --data_path_tB "/mnt/prep-data/prep_PSI/b_raw/*.fits" --path_to_save "/mnt/training/PSI_v2" --train "config/train.yaml" --hyperparameters "config/hyperparams_psi.yaml"
