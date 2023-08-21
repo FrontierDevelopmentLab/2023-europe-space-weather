@@ -44,22 +44,38 @@ class VigilDataset(Dataset):
         self.data_max = data_max
         self.image_transforms = image_transforms
 
-
     def __len__(self):
         return len(self.fts_items)
-    
+
+    def logscale_and_normalize(self, img:torch.Tensor):
+        # Log scale and normalize input in [0,1]
+        img = (img - self.data_min)/(self.data_max-self.data_min) # minmax or min subtraction?
+        img = img + 1e-6
+        img = torch.log(img)
+        logmin = np.log(1e-6)
+        logmax = np.log(self.data_max - self.data_min + 1e-6)
+        img = (img-logmin)/(logmax-logmin)
+
+        return img
+
     def __getitem__(self, index):
         # read numpy file and return tuple (image, fname)
         fname = self.fts_items[index]
         img = np.load(fname)
-        #print("overall data_min = ", self.data_min)
-        #print("overall data_max = ", self.data_max)
-        img_min = np.amin(img)
-        img_max = np.amax(img)
+        img = torch.from_numpy(img).type(torch.FloatTensor)
+        print("overall data_min = ", self.data_min)
+        print("overall data_max = ", self.data_max)
+        #img_min = np.amin(img)
+        #img_max = np.amax(img)
+        #img = (img-img_min)/(img_max-img_min+1e-6)
         #img = (img-self.data_min)/(self.data_max-self.data_min)
-        img = (img-img_min)/(img_max-img_min+1e-6)
+        #img = self.logscale_and_normalize(img)
+        img = torch.clamp(img, 0, 1)
+        #img = img + 1e-6
+        #img = torch.log(img)
+        #img = torch.clamp(img, 0, 1)
 
-        return torch.from_numpy(img).type(torch.FloatTensor), fname
+        return img, fname
 
 class FitsDataModule(LightningDataModule):
     """
@@ -118,14 +134,30 @@ class FitsDataModule(LightningDataModule):
                 # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ]
         )
-    
+
+    # need to do GroupCV so we have different events in train/val/test splits
+    def get_minmax(self, filenames):
+        glb_min, glb_max = np.inf, -np.inf
+        for f in tqdm(filenames, total = len(filenames)):
+            img = np.load(f)
+            img_min = np.amin(img)
+            img_max = np.amax(img)
+            if img_min < glb_min:
+                glb_min = img_min
+            if img_max > glb_max:
+                glb_max = img_max
+        
+        return glb_min, glb_max
+
+
+
     def generate_ref_data(self, filenames, polar_angle):
         """
         generate background reference image to be subtracted
         """
 
         ref_data = []
-        for i in filenames[:15]:  # range(len(filenames)):
+        for i in filenames:
             # angle = fits.getheader(filenames[i])['POLAR']
             m = Map(i)
             angle = m.meta["POLAR"]
@@ -249,16 +281,17 @@ class FitsDataModule(LightningDataModule):
         fnames_train, fnames_val, fnames_test = random_split(
             fnames, [self.train_pct, self.valid_pct, self.test_pct]
         )
-        prep_train_fnames, data_min, data_max = self.generate_images(fnames_train, self.prep_path)
+        #prep_train_fnames, data_min, data_max = self.generate_images(fnames_train, self.prep_path)
+        data_min, data_max = self.get_minmax(fnames_train)
         self.train_data = VigilDataset(
-            prep_train_fnames, data_min, data_max, image_transforms=self.image_transforms
+            fnames_train, data_min, data_max, image_transforms=self.image_transforms
         )
-        prep_test_fnames, _, _ = self.generate_images(fnames_test, self.prep_path)
+        #prep_test_fnames, _, _ = self.generate_images(fnames_test, self.prep_path)
         self.test_data = VigilDataset(
-            prep_test_fnames, data_min, data_max, image_transforms=self.image_transforms
+            fnames_test, data_min, data_max, image_transforms=self.image_transforms
         )
-        prep_val_fnames, _, _ = self.generate_images(fnames_val, self.prep_path)
-        self.val_data = VigilDataset(prep_val_fnames, data_min, data_max, image_transforms=self.image_transforms)
+        #prep_val_fnames, _, _ = self.generate_images(fnames_val, self.prep_path)
+        self.val_data = VigilDataset(fnames_val, data_min, data_max, image_transforms=self.image_transforms)
         print("Datasets set up")
 
     def train_dataloader(self) -> DataLoader:

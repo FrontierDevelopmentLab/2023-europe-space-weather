@@ -39,6 +39,8 @@ from lightning.pytorch.callbacks import (
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.pytorch.tuner.tuning import Tuner
+from icarus.onboard.compressai.load_STEREO import load_data
+import matplotlib.pyplot as plt
 
 
 
@@ -47,15 +49,18 @@ class NCompressor(LightningModule):
         self,
         quality=2,
         loss="mse",
-        learning_rate=1e-4,
+        learning_rate=1e-6,
         learning_rate_schedule_patience=10,
-        batch_size=4,
+        batch_size=4
     ):
         super().__init__()
         self.save_hyperparameters()
 
         # define model
         self.model = bmshj2018_factorized(quality=quality, pretrained=True)
+
+        # create mask
+        self.mask = self.create_mask()
 
         # msssim may be unstable
         if self.hparams.loss == "mssim":
@@ -77,8 +82,29 @@ class NCompressor(LightningModule):
         #     torchmetrics.image.RootMeanSquaredErrorUsingSlidingWindow(),
         # ]
         self.metric = torchmetrics.image.PeakSignalNoiseRatio()
+        # Add MSE
 
         self.batch_size = batch_size
+
+    def create_circular_mask(self, h, w, center=None, radius=None):
+
+        if center is None: # use the middle of the image
+            center = (int(w/2), int(h/2))
+        if radius is None: # use the smallest distance between the center and image walls
+            radius = min(center[0], center[1], w-center[0], h-center[1])
+
+        Y, X = np.ogrid[:h, :w]
+        dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+
+        mask = dist_from_center <= radius
+        return mask
+    
+    def create_mask(self):
+        mask = self.create_circular_mask(2048, 2048, radius=130) == 1
+        mask = np.logical_xor(self.create_circular_mask(2048, 2048) == 1, mask)
+
+        return torch.Tensor(mask)
+
 
     def forward(self, x):
         return self.model.forward(x)
@@ -86,13 +112,15 @@ class NCompressor(LightningModule):
     def training_step(self, batch, batch_idx):
         images, fts_file = batch
         x = images #/ 65535  # TODO: add this to dataloader
+        x = torch.multiply(x, self.mask.to(x.device))
         #print("x min = ", torch.min(x))
         #print("x max = ", torch.max(x))
         x_hat = self.forward(x)["x_hat"]
+        x_hat = torch.multiply(x_hat, self.mask.to(x_hat.device))
         #print("x_hat min = ", torch.min(x_hat))
         #print("x_hat max = ", torch.max(x_hat))
         #print("x hat shape = ", x_hat.shape)
-        loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
+        loss = self.loss(x_hat, x)#-self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
         #print("loss = ", loss)
         # if batch_idx % 10 == 0:
         self.log(
@@ -112,8 +140,10 @@ class NCompressor(LightningModule):
         self.model.eval()
         images, fts_file = batch
         x = images #/ 65535  # TODO: add this to dataloader
+        x = torch.multiply(x, self.mask.to(x.device))
         x_hat = self.model(x)["x_hat"]
-        loss = -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
+        x_hat = torch.multiply(x_hat, self.mask.to(x_hat.device))
+        loss = self.loss(x_hat, x) #-self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 
         # for i in range(len(self.metric)):
         #     self.metric[i].update(x_hat, x)
@@ -126,24 +156,26 @@ class NCompressor(LightningModule):
 
         if batch_idx == self.validation_batch_index:
             if wandb.run:
-                diff = (x_hat - x).abs() 
+                diff = (x_hat - x).abs()
+                cm = plt.get_cmap('viridis')
                 wandb.log(
                     {
                         "observations": [
                             wandb.Image(
-                                #x[0].cpu().permute(1, 2, 0).numpy(),
+                                cm(x[0,0].cpu().numpy()),#.permute(1, 2, 0).numpy(),
                                 # Clamp [0,1]
-                                torch.clamp(x[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
+                                #torch.clamp(x[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
                                 caption="Input ("+ str(fts_file[0]) +")",
                             ),
                             wandb.Image(
                                 # Clamp [0,1] model output to avoid rescaling in wandb (when predicted values are out of [0,1])
-                                torch.clamp(x_hat[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
-                                #x_hat[0].cpu().permute(1, 2, 0).numpy(),
+                                cm(torch.clamp(x_hat[0,0], 0, 1).cpu().numpy()),#.permute(1, 2, 0).numpy(),
+                                #x_hat[0,0].cpu().numpy(),#.permute(1, 2, 0).numpy(),
                                 caption="Prediction",
                             ),
                             wandb.Image(
-                                torch.clamp(diff[0,0], 0, 1).cpu().numpy(),#.permute(1, 2, 0).numpy(),
+                                cm(torch.clamp(diff[0,0], 0, 1).cpu().numpy()),#.permute(1, 2, 0).numpy(),
+                                #diff[0,0].cpu().numpy(),
                                 caption="Difference",
                             ),
                         ],
@@ -156,10 +188,12 @@ class NCompressor(LightningModule):
         self.model.eval()
         images, fts_file = batch
         x = images #/ 65535  # TODO: add this to dataloader
+        x = torch.multiply(x, self.mask.to(x.device))
         if torch.any(torch.isnan(x)):
             raise ValueError("there was nan in the x!")
         x_hat = self.model(x)["x_hat"]
-        loss =  -self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
+        x_hat = torch.multiply(x_hat, self.mask.to(x_hat.device))
+        loss = self.loss(x_hat, x) #-self.loss(x_hat, x)  # minus sign needs to be removed when using MSE
 
         # if batch_idx % 10 == 0:
         self.log(
