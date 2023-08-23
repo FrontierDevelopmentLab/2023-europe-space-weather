@@ -31,12 +31,15 @@ ckpt_dirname = "HAO_pinn_cr_2view_a26978f_heliographic_reformat"
 # ckpt_dirname = "HAO_pinn_2view_no_physics"
 # ckpt_dirname = "HAO_pinn_2view_cr"
 # ckpt_dirname = "HAO_pinn_5view_cr"
+# ckpt_dirname = "HAO_pinn_5view_no_physics"
 # og-eda-3
 # ckpt_dirname = "HAO_pinn_2view_cr3"
 # ckpt_dirname = "HAO_pinn_1view_cr3"
+# ckpt_dirname = "HAO_pinn_5view_cr3"
 # scan
 # ckpt_dirname = "HAO_pinn_1view_no_physics"
 # ckpt_dirname = "HAO_pinn_1view_cr"
+# ckpt_dirname = "HAO_pinn_5view_c"
 
 
 def save_stepnum_to_datetime():
