@@ -10,23 +10,24 @@ from sunerf.evaluation.loader import SuNeRFLoader
 from sunerf.utilities.data_loader import normalize_datetime
 import cv2
 
-from tvtk.api import tvtk, write_data
+#from tvtk.api import tvtk, write_data
 
 from mpl_toolkits.mplot3d import Axes3D
+
+
+from scipy.spatial.transform import Rotation #Used to Recalculate L5
 
 import imageio #gifs
 import logging
 import sys
 
-from scipy.spatial import ConvexHull #ConvexHull used to note the simplexes - This allows for 3D visualization of the structure!
-
 #import vtk
-import tvtk
+#import tvtk
 
 #logging.getLogger().addHandler(logging.StreamHandler(sys.stdout)) # Output to console.
 
 
-base_path = '/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
+base_path = '/mnt/training/HAO_pinn_2view_continuity'#'/mnt/training/HAO_pinn_cr_2view_a26978f_heliographic_reformat'
 
 chk_path = os.path.join(base_path, 'save_state.snf')
 video_path_dens = os.path.join(base_path, 'video_cube')
@@ -104,12 +105,12 @@ mean_velocity = np.asarray(speeds).mean()
 
 perc_dens = np.percentile(np.asarray(densities),percentile)
 perc_speed = np.percentile(np.asarray(speeds),percentile)
-print("Mean Density: {} g per cm^3 \n {}% Percentile:{} g per cm^3 \n Max Density: {} g per cm^3 \n Min Density: {:.3f} g per cm^3.".format(mean_density,percentile, perc_dens,global_max_rho, global_min_rho))
+print("Mean Density: {:.3e} g per cm^3 \n {:.3f}% Percentile:{:.3e} g per cm^3 \n Max Density: {:.3e} g per cm^3 \n Min Density: {:.3e} g per cm^3.".format(mean_density,percentile, perc_dens,global_max_rho, global_min_rho))
 print("Mean Velocity: {:.3f} Solar Radii per 2 days \n {}% Percentile:{:.3f} Solar Radii per 2 days \n Max Velocity: {:.3f} Solar Radii per 2 days \n Min Velocity: {:.3f} Solar Radii per 2 days.".format(mean_velocity,percentile,perc_speed,global_max_v, global_min_v))
 # Choose thresholds on some percentile
 density_threshold = perc_dens
 velocity_threshold = perc_speed #Most CMEs appear to be moving with a velocity of 3
-print("Thresholding density at {} grams per cm^3, velocity at {:.3f} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
+print("Thresholding density at {:.3e} grams per cm^3, velocity at {:.3f} Solar Radii per 2 days.".format(density_threshold, velocity_threshold))
 
 
 def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z_fil, alpha_expon, norm = "linear",fname_subtag = None):
@@ -156,8 +157,14 @@ def plot_datacube_directly(cube, global_min,global_max, tag, idx, x_fil, y_fil,z
     # Earth position defined on x axis, 1 AU = 215.032 Solar Radii
     r_earth = 215.032
     center_earth = (-r_earth, 0, 0)
+    mean_expected_velocity = np.array([-1.2207752, -2.5797436,  0 ], dtype=np.float32) #technically in solar radii per 2 days - ignore the days - taken from the data_cube_model analysis
+    earth_direction = mean_expected_velocity/np.linalg.norm(mean_expected_velocity) #This should be the direction of the earth on the xy plane, as the CME had been selected to hit the earth
+    
+    center_earth = earth_direction*r_earth
+    l5_earth_angle = -np.pi/3
+    center_l5 = np.matmul(Rotation.from_rotvec(np.asarray([0,0,l5_earth_angle])).as_matrix(), center_earth)
     # If center_earth = (-r_earth, 0, 0) then on a circle, this is at pi radians. If L5 is trailing, then L5 is at (r_earth*cos(2/3*np.pi), r_earth*sin(2/3*np.pi), 0)
-    center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
+    #center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
 
     x_l5 = x_earth + center_l5[0]
     y_l5 = x_earth + center_l5[1]
@@ -247,10 +254,17 @@ def plot_datacube(cube,global_min:float, global_max:float, tag:str, idx:int, plo
     z_earth = np.outer(np.ones(np.size(u)), np.cos(v))*7# * radius_earth
 
     # Earth position defined on x axis, 1 AU = 215.032 Solar Radii
+    
     r_earth = 215.032
     center_earth = (-r_earth, 0, 0)
+    mean_expected_velocity = np.array([-1.2207752, -2.5797436,  0 ], dtype=np.float32) #technically in solar radii per 2 days - ignore the days - taken from the data_cube_model analysis
+    earth_direction = mean_expected_velocity/np.linalg.norm(mean_expected_velocity) #This should be the direction of the earth on the xy plane, as the CME had been selected to hit the earth
+    
+    center_earth = earth_direction*r_earth
+    l5_earth_angle = -np.pi/3
+    center_l5 = np.matmul(Rotation.from_rotvec(np.asarray([0,0,l5_earth_angle])).as_matrix(), center_earth)
     # If center_earth = (-r_earth, 0, 0) then on a circle, this is at pi radians. If L5 is trailing, then L5 is at (r_earth*cos(2/3*np.pi), r_earth*sin(2/3*np.pi), 0)
-    center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
+    #center_l5 = (r_earth*np.cos(2/3*np.pi), r_earth*np.sin(2/3*np.pi), 0)
     x_l5 = x_earth + center_l5[0]
     y_l5 = x_earth + center_l5[1]
     z_l5 = x_earth + center_l5[2]
@@ -336,7 +350,6 @@ for i, (rho, v, abs_v) in enumerate(zip(densities, velocities, speeds)):
     if last_mask is None:
         last_mask = mask #set up last mask as the first possible mask - otherwise might flicker
 
-
 frame_duration = 0.5 #2fps
 if len(density_filenames):
     with imageio.get_writer(os.path.join(video_path_dens,'density.gif'), mode='I', duration=frame_duration) as writer:
@@ -358,4 +371,3 @@ if len(masked_density_filenames):
         for filename in masked_density_filenames:
             image = imageio.v3.imread(filename)
             writer.append_data(image)
-
