@@ -3,33 +3,39 @@ import logging
 import multiprocessing
 import os
 from datetime import datetime, timedelta
-from tqdm import tqdm
+from warnings import simplefilter
 
 import numpy as np
 import torch
 from astropy import units as u
 from pytorch_lightning import LightningDataModule
 from sunpy.map import Map
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import Dataset
+from tqdm import tqdm
 
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.train.ray_sampling import get_rays
 
-from torch.utils.data import DataLoader, RandomSampler
-
-from warnings import simplefilter
 
 class NeRFDataModule(LightningDataModule):
 
-    def __init__(self, hparams):
+    def __init__(self, data_path_pB, data_path_tB, working_dir, Mm_per_ds, seconds_per_dt,
+                 ref_time=None, radius_range=[1.461e+4, 1.4e+5],
+                 batch_size=int(2 ** 10), num_workers=None, debug=False):
         super().__init__()
+        self.Mm_per_ds = Mm_per_ds
+        self.seconds_per_dt = seconds_per_dt
+
+        radius_range = np.array(radius_range) / Mm_per_ds
+        self.radius_range = radius_range
 
         logging.info('Load data')
-        images, poses, rays, times, focal_lengths, wavelength = get_data(hparams)
+        images, poses, rays, times, focal_lengths, wavelength = get_data(data_path_pB, data_path_tB, debug)
 
-        # fix time offset for transfer learning (TODO replace)
-        if 'time_offset' in hparams:
-            times = np.array(times) + hparams['time_offset']
+        # normalize data
+        self.ref_time = ref_time if ref_time is not None else times[0]
+        times = np.array([normalize_datetime(t, seconds_per_dt, self.ref_time) for t in times])
 
         # keep data for logging
         self.images = images
@@ -37,37 +43,26 @@ class NeRFDataModule(LightningDataModule):
         self.times = np.array(times)
         self.wavelength = wavelength
 
-        self.working_dir = hparams['Training']['working_directory']
-        os.makedirs(self.working_dir, exist_ok=True)
-
         N_GPUS = torch.cuda.device_count()
-        self.batch_size = int(hparams['Training']['batch_size']) * N_GPUS
-        self.points_batch_size = int(hparams['Training']['points_batch_size']) * N_GPUS
+        self.batch_size = batch_size * N_GPUS
+        self.points_batch_size = batch_size * N_GPUS
 
-        num_workers = hparams['Training']['num_workers']
         self.num_workers = num_workers if num_workers is not None else os.cpu_count() // 2
 
-        # use an image of the first instrument (SDO)
+        # use an image of the first instrument
         test_idx = len(images) // 6
 
         print("BEFORE FLATTEN", np.array(rays).shape, np.array(times).shape, np.array(images).shape)
         valid_rays, valid_times, valid_images = self._flatten_data([v for i, v in enumerate(rays) if i == test_idx],
                                                                    [v for i, v in enumerate(times) if i == test_idx],
                                                                    [v for i, v in enumerate(images) if i == test_idx])
-        print("AFTER FLATTEN", valid_rays.shape, valid_images.shape, valid_times.shape)                                                           
-                                                                   
+        print("AFTER FLATTEN", valid_rays.shape, valid_images.shape, valid_times.shape)
+
         # remove nans (masked values) from data
         # not_nan_pixels = np.any(~np.isnan(valid_images), -1) # instead of valid_images valid_times
         # print("NAN PIXELLING", not_nan_pixels.shape, not_nan_pixels[:3])
         # valid_rays, valid_times, valid_images = valid_rays[not_nan_pixels], valid_times[not_nan_pixels], valid_images[not_nan_pixels]
-                                                                   
-        # batching
-        logging.info('Convert data to batches')
-        n_batches = int(np.ceil(valid_rays.shape[0] / self.batch_size))
-        print(valid_rays.shape, n_batches)
-        valid_rays, valid_times, valid_images = np.array_split(valid_rays, n_batches), \
-                                                np.array_split(valid_times, n_batches), \
-                                                np.array_split(valid_images, n_batches)
+
         self.valid_rays, self.valid_times, self.valid_images = valid_rays, valid_times, valid_images
         self.test_kwargs = {'focal': focal_lengths[test_idx],
                             'resolution': images[test_idx].shape[0]}
@@ -76,6 +71,7 @@ class NeRFDataModule(LightningDataModule):
         rays, times, images = self._flatten_data([v for i, v in enumerate(rays) if i != test_idx],
                                                  [v for i, v in enumerate(times) if i != test_idx],
                                                  [v for i, v in enumerate(images) if i != test_idx])
+        print("AFTER FLATTEN TRAIN", rays.shape, images.shape, times.shape)
 
         # remove nans (masked values) from data
         not_nan_pixels = ~np.any(np.isnan(images), -1)
@@ -84,22 +80,12 @@ class NeRFDataModule(LightningDataModule):
         # shuffle
         r = np.random.permutation(rays.shape[0])
         rays, times, images = rays[r], times[r], images[r]
-        # account for unequal length of last batch by padding with data from beginning
-        pad = self.batch_size - rays.shape[0] % self.batch_size
-        rays = np.concatenate([rays, rays[:pad]])
-        times = np.concatenate([times, times[:pad]])
-        images = np.concatenate([images, images[:pad]])
-        # batching
-        n_batches = rays.shape[0] // self.batch_size
-        rays, times, images = np.array(np.split(rays, n_batches), dtype=np.float32), \
-                              np.array(np.split(times, n_batches), dtype=np.float32), \
-                              np.array(np.split(images, n_batches), dtype=np.float32)
         # save npy files
         # create file names
         logging.info('Save batches to disk')
-        batch_file_rays = os.path.join(self.working_dir, 'rays_batches.npy')
-        batch_file_times = os.path.join(self.working_dir, 'times_batches.npy')
-        batch_file_images = os.path.join(self.working_dir, 'images_batches.npy')
+        batch_file_rays = os.path.join(working_dir, 'rays_batches.npy')
+        batch_file_times = os.path.join(working_dir, 'times_batches.npy')
+        batch_file_images = os.path.join(working_dir, 'images_batches.npy')
         # save to disk
         np.save(batch_file_rays, rays)
         np.save(batch_file_times, times)
@@ -108,9 +94,12 @@ class NeRFDataModule(LightningDataModule):
         self.train_rays, self.train_times, self.train_images = batch_file_rays, batch_file_times, batch_file_images
 
         logging.info('Create data sets')
-        self.valid_data = BatchesDataset(self.valid_rays, self.valid_times, self.valid_images)
-        self.train_data = NumpyFilesDataset(self.train_rays, self.train_times, self.train_images)
-        self.points_data = RandomCoordinateDataset([21, 200], [np.min(times), np.max(times)], self.points_batch_size)
+        self.valid_data = TensorDataset({'rays': torch.tensor(self.valid_rays, dtype=torch.float32),
+                                         'times': torch.tensor(self.valid_times, dtype=torch.float32),
+                                         'images': torch.tensor(self.valid_images, dtype=torch.float32)})
+        self.train_data = BatchesDataset({'rays': self.train_rays, 'times': self.train_times, 'images': self.train_images},
+                                         batch_size=self.batch_size)
+        self.points_data = RandomCoordinateDataset(radius_range, [np.min(times), np.max(times)], self.points_batch_size)
 
     def _flatten_data(self, rays, times, images):
         flat_rays = np.concatenate(rays)
@@ -121,10 +110,12 @@ class NeRFDataModule(LightningDataModule):
 
     def train_dataloader(self):
         # handle batching manually
-        ray_data_loader = DataLoader(self.train_data, batch_size=None, num_workers=self.num_workers, pin_memory=True, shuffle=True)
+        ray_data_loader = DataLoader(self.train_data, batch_size=None, num_workers=self.num_workers, pin_memory=True,
+                                     shuffle=True)
         points_loader = DataLoader(self.points_data, batch_size=None, num_workers=self.num_workers, pin_memory=True,
-                                   sampler=RandomSampler(self.train_data, replacement=True, num_samples=len(self.train_data)))
-        return {'rays': ray_data_loader, 'points': points_loader}
+                                   sampler=RandomSampler(self.train_data, replacement=True,
+                                                         num_samples=len(self.train_data)))
+        return {'tracing': ray_data_loader, 'random': points_loader}
 
     def val_dataloader(self):
         # handle batching manually
@@ -134,14 +125,46 @@ class NeRFDataModule(LightningDataModule):
 
 class BatchesDataset(Dataset):
 
-    def __init__(self, *batches):
-        self.batches = batches
+    def __init__(self, batches_file_paths, batch_size=2 ** 13, **kwargs):
+        """Data set for lazy loading a pre-batched numpy data array.
+
+        :param batches_path: path to the numpy array.
+        """
+        self.batches_file_paths = batches_file_paths
+        self.batch_size = int(batch_size)
 
     def __len__(self):
-        return len(self.batches[0])
+        ref_file = list(self.batches_file_paths.values())[0]
+        n_batches = np.ceil(np.load(ref_file, mmap_mode='r').shape[0] / self.batch_size)
+        return n_batches.astype(np.int32)
 
     def __getitem__(self, idx):
-        return [b[idx] for b in self.batches]
+        # lazy load data
+        data = {k: np.copy(np.load(bf, mmap_mode='r')[idx * self.batch_size: (idx + 1) * self.batch_size])
+                for k, bf in self.batches_file_paths.items()}
+        return data
+
+    def clear(self):
+        [os.remove(f) for f in self.batches_file_paths.values()]
+
+class TensorDataset(Dataset):
+
+    def __init__(self, tensor_dict, batch_size=2 ** 13, **kwargs):
+        """Data set for lazy loading a pre-batched numpy data array.
+
+        :param batches_path: path to the numpy array.
+        """
+        self.tensor_dict = tensor_dict
+        self.batch_size = int(batch_size)
+
+    def __len__(self):
+        ref_tensor = list(self.tensor_dict.values())[0]
+        return np.ceil(ref_tensor.shape[0] / self.batch_size).astype(int)
+
+    def __getitem__(self, idx):
+        data = {k: v[idx * self.batch_size: (idx + 1) * self.batch_size]
+                for k, v in self.tensor_dict.items()}
+        return data
 
 
 class NumpyFilesDataset(Dataset):
@@ -156,12 +179,7 @@ class NumpyFilesDataset(Dataset):
         return [np.copy(np.load(batch_file, mmap_mode='r')[idx]) for batch_file in self.paths]
 
 
-def get_data(config_data):
-    debug = config_data['Debug']
-
-    data_path_pB = config_data['data_path_pB']
-    data_path_tB = config_data['data_path_tB']
-
+def get_data(data_path_pB, data_path_tB, debug=False):
     # HEO 1276 tB files, 1351 pB files
     # can assume matching names have matching obs times and angles
     s_maps_pB = sorted(glob.glob(data_path_pB))
@@ -174,7 +192,7 @@ def get_data(config_data):
     with multiprocessing.Pool(os.cpu_count()) as p:
         data_pB = [d for d in tqdm(p.imap(_load_map_data, s_maps_pB), total=len(s_maps_pB))]
         data_tB = [d for d in tqdm(p.imap(_load_map_data, s_maps_tB), total=len(s_maps_tB))]
-    
+
     _, poses, rays, times, focal_lengths = list(map(list, zip(*data_tB)))
 
     images = np.stack([[d[0] for d in data_tB], [d[0] for d in data_pB]], -1)
@@ -192,15 +210,22 @@ def _load_map_data(map_path):
     W = s_map.data.shape[0]  # number of pixels
     focal = (.5 * W) / np.arctan(0.5 * (scale * W * u.pix).to(u.deg).value * np.pi / 180)
 
-    time = normalize_datetime(s_map.date.datetime)
+    time = s_map.date.datetime
 
     print('COORDS', s_map.heliographic_longitude, s_map.heliographic_latitude)
     pose = pose_spherical(-s_map.heliographic_longitude.to(u.deg).value,
                           s_map.heliographic_latitude.to(u.deg).value,
-                          s_map.dsun.to(u.solRad).value).float().numpy()
+                          s_map.dsun.to_value(u.solRad)).float().numpy()
 
     image = s_map.data.astype(np.float32)
     all_rays = np.stack(get_rays(image.shape[0], image.shape[1], s_map.reference_pixel, focal, pose), -2)
+
+    # rays_o = all_rays[:, :, 0, :]
+    # rays_d = all_rays[:, :, 1, :]
+    # distance = np.linalg.norm(rays_o, axis=-1)
+    # print("DISTANCE", distance.min(), distance.max())
+    # print('Expected Distance', s_map.dsun.to_value(u.solRad))
+    # print('Direction norm', np.linalg.norm(rays_d, axis=-1).min(), np.linalg.norm(rays_d, axis=-1).max())
 
     # crop to square
     min_dim = min(image.shape[:2])
@@ -212,7 +237,7 @@ def _load_map_data(map_path):
     return image, pose, all_rays, time, focal
 
 
-def normalize_datetime(date, max_time_range=timedelta(days=2)):
+def normalize_datetime(date, seconds_per_dt, ref_time):
     """Normalizes datetime object for ML input.
 
     Time starts at 2010-01-01 with max time range == 2 pi
@@ -224,11 +249,10 @@ def normalize_datetime(date, max_time_range=timedelta(days=2)):
     -------
     normalized date
     """
-    # TODO check this 30 days is valid for us
-    return (date - datetime(2010, 1, 1)) / max_time_range * (2 * np.pi)
+    return (date - ref_time).total_seconds() / seconds_per_dt
 
 
-def unnormalize_datetime(norm_date: float) -> datetime:
+def unnormalize_datetime(norm_date: float, seconds_per_dt, ref_time) -> datetime:
     """Computes the actual datetime from a normalized date.
 
     Parameters
@@ -239,15 +263,15 @@ def unnormalize_datetime(norm_date: float) -> datetime:
     -------
     real datetime
     """
-    return norm_date * timedelta(days=2) / (2 * np.pi) + datetime(2010, 1, 1)
+    return ref_time + timedelta(seconds=norm_date * seconds_per_dt)
 
 
 class RandomCoordinateDataset(Dataset):
 
-    def __init__(self, radius, times, batch_size):
+    def __init__(self, radius_range, time_range, batch_size):
         super().__init__()
-        self.radius = radius # [[inner, outer]]
-        self.times = times # [[start, end]]
+        self.radius_range = radius_range  # [[inner, outer]]
+        self.time_range = time_range  # [[start, end]]
         self.batch_size = batch_size
         self.float_tensor = torch.FloatTensor
 
@@ -256,10 +280,10 @@ class RandomCoordinateDataset(Dataset):
 
     def __getitem__(self, item):
         random_coords = self.float_tensor(self.batch_size, 4).uniform_()
-        r = self.radius[0] + (self.radius[1] - self.radius[0]) * random_coords[:, 0] ** 2 # sample more points closer to inner boundary
+        r = self.radius_range[0] + (self.radius_range[1] - self.radius_range[0]) * random_coords[:, 0]
         theta = torch.pi * random_coords[:, 1]
         phi = 2 * torch.pi * random_coords[:, 2]
-        t = self.times[0] + (self.times[1] - self.times[0]) * random_coords[:, 3]
+        t = self.time_range[0] + (self.time_range[1] - self.time_range[0]) * random_coords[:, 3]
 
         x = r * torch.sin(theta) * torch.cos(phi)
         y = r * torch.sin(theta) * torch.sin(phi)

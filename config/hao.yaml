@@ -1,0 +1,26 @@
+# Data:
+#   data_sim_type : 'hao' # simulated data (psi or hao)
+#   data_path : '/mnt/ground-data/data_fits/dcmer_0000_bang_0000_pB'
+
+path_to_save: "/glade/work/rjarolim/sunerf-cme/allview_v04"
+working_directory: '/glade/work/rjarolim/sunerf-cme/allview_v04'
+wandb:
+  entity: "ssa_live_twin"
+  project: "sunerf-cme"
+  name: "all viewpoints"
+
+data:
+  data_path_pB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_allview/*pB*.fits"
+  data_path_tB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_allview/*tB*.fits"
+  debug: True
+  Mm_per_ds: 6.957e+2 # 1 solar radius in Mm --> fixed in data loader
+  seconds_per_dt: 86400
+
+sampling_config:
+  n_samples: 64
+  near: -1.4e+5
+  far: 1.4e+5
+
+module:
+  image_scaling_config: {vmin: -8, vmax: -4}
+  lambda_velocity_regularization: 1.0e-3

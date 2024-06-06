@@ -43,8 +43,7 @@ def _load_HAO(file_path):
     header["CRPIX1"] = header["NAXIS1"]*0.5 + 0.5
     header["CRPIX2"] = header["NAXIS2"]*0.5 + 0.5
 
-    #TODO: To be changed ... This is hardcoded for now, ask robert 
-    header['wavelnth'] = 5200 
+    header['wavelnth'] = 5200 # dummy value for wavelength
 
     return Map(data, header)
 
@@ -79,9 +78,6 @@ def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
     data = s_map.data
     data[mask] = np.nan
 
-    # normalize image data
-    v_min, v_max = -18, -10
-    data = (np.log(data) - v_min) / (v_max - v_min)
     data = data.astype(np.float32)
 
     s_map = Map(data, s_map.meta)

@@ -5,6 +5,7 @@ from glob import glob
 import os
 import re
 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # stepnum = 43
 # stepnum_str = "0{}".format(stepnum) if stepnum < 100 else "{}".format(stepnum)
@@ -43,13 +44,19 @@ import re
 # polar plot: https://matplotlib.org/stable/gallery/pie_and_polar_charts/polar_demo.html
 # https://stackoverflow.com/questions/17201172/a-logarithmic-colorbar-in-matplotlib-scatter-plot
 
-savefile_folder = "/mnt/ground-data/density_cube"
+savefile_folder = "/glade/work/rjarolim/data/sunerf-cme/hao/density_cube"
+result_path = '/glade/work/rjarolim/sunerf-cme/ground_truth'
+os.makedirs(result_path, exist_ok=True)
 
 for fname in glob(savefile_folder + "/*_0*.sav"):
     stepnum = int(re.findall(r'\d+',os.path.basename(fname))[-1])
     stepnum = "0{}".format(stepnum) if stepnum < 100 else "{}".format(stepnum)
-    
-    o = scipy.io.readsav(fname)
+
+    try:
+        o = scipy.io.readsav(fname)
+    except:
+        print(f"Error reading {fname}")
+        continue
 
     dens = o['dens']  # (258, 128, 256)
     ph = o['ph1d']
@@ -65,9 +72,10 @@ for fname in glob(savefile_folder + "/*_0*.sav"):
 
     ax.set_rlim(21, 200)
 
-    ax.pcolormesh(phph, rr, z, edgecolors='face', norm='log')
+    pc = ax.pcolormesh(phph, rr, z, edgecolors='face', norm='log', cmap='inferno')
+    fig.colorbar(pc)
 
     ax.set_title("Density polar plot", va='bottom')
     plt.show()
-    plt.savefig(f'polar_dens_slice_gt_{stepnum}.jpg')
+    plt.savefig(os.path.join(result_path, f'dens_polar_{stepnum}.jpg'), dpi=100)
     plt.close('all')

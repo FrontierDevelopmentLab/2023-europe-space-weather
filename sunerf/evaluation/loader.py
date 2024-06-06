@@ -1,16 +1,18 @@
 from typing import Tuple
 
+import numpy as np
 import torch
 from astropy import units as u
 from datetime import datetime
 from sunpy.map.mapbase import PixelPair
 from torch import nn
+from torch.nn import DataParallel
 
 from sunerf.train.coordinate_transformation import pose_spherical
-from sunerf.train.model import PositionalEncoder
+from sunerf.model.model import PositionalEncoder
 from sunerf.train.ray_sampling import get_rays
 from sunerf.train.volume_render import nerf_forward
-from sunerf.utilities.data_loader import normalize_datetime
+from sunerf.utilities.data_loader import normalize_datetime, unnormalize_datetime
 
 
 class SuNeRFLoader:
@@ -19,25 +21,31 @@ class SuNeRFLoader:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
 
         state = torch.load(state_path)
-        self.sampling_kwargs = state['sampling_kwargs']
-        self.scaling_kwargs = state['scaling_kwargs']
         self.resolution = resolution if resolution is not None else state['test_kwargs']['resolution']
         self.focal = focal if focal is not None else state['test_kwargs']['focal']
         self.wavelength = state['wavelength']
-        self.start_time = state['start_time']
-        self.end_time = state['end_time']
+        self.times = state['times']
         self.config = state['config']
-
-        encoder = PositionalEncoder(**state['encoder_kwargs'])
-        self.encoding_fn = lambda x: encoder(x)
-        print(device)
-        if device == torch.device("cuda"): 
-            self.coarse_model = nn.DataParallel(state['coarse_model']).to(device)
-            self.fine_model = nn.DataParallel(state['fine_model']).to(device)
-        else:
-            self.coarse_model = state['coarse_model']
-            self.fine_model = state['fine_model'] 
         self.device = device
+        self.rho_model = state['model']['rho']
+        self.v_model = state['model']['v']
+
+        self.rho_model = DataParallel(self.rho_model).to(device)
+        self.v_model = DataParallel(self.v_model).to(device)
+        self.sampler = state['sampling']['stratified']
+        self.hierarchical_sampler = state['sampling']['hierarchical']
+        self.rendering = state['rendering']
+        self.seconds_per_dt = state['seconds_per_dt']
+        self.Mm_per_ds = state['Mm_per_ds']
+        self.ref_time = state['ref_time']
+
+    @property
+    def start_time(self):
+        return self.unnormalize_datetime(np.min(self.times))
+
+    @property
+    def end_time(self):
+        return self.unnormalize_datetime(np.max(self.times))
 
     def load_observer_image(self, lat: float, lon: float, time: datetime,
                             distance: float = (1 * u.AU).to(u.solRad).value,
@@ -55,7 +63,7 @@ class SuNeRFLoader:
             rays_o = rays_o[::strides, ::strides].reshape([-1, 3]).to(self.device)
             rays_d = rays_d[::strides, ::strides].reshape([-1, 3]).to(self.device)
 
-            time = normalize_datetime(time)
+            time = normalize_datetime(time, self.seconds_per_dt)
             flat_time = (torch.ones(img_shape) * time).view((-1, 1)).to(self.device)
             # make batches
             rays_o, rays_d, time = torch.split(rays_o, batch_size), \
@@ -64,9 +72,10 @@ class SuNeRFLoader:
 
             outputs = {}
             for b_rays_o, b_rays_d, b_time in zip(rays_o, rays_d, time):
-                b_outs = nerf_forward(b_rays_o, b_rays_d, b_time, self.coarse_model, self.fine_model,
-                                      encoding_fn=self.encoding_fn,
-                                      **self.sampling_kwargs, **self.scaling_kwargs)
+                b_outs = nerf_forward(b_rays_o, b_rays_d, b_time,
+                                      model=self.rho_model, sampler=self.sampler,
+                                      hierarchical_sampler=self.hierarchical_sampler,
+                                      rendering=self.rendering)
                 for k in b_outs.keys():
                     if k not in outputs:
                         outputs[k] = []
@@ -74,3 +83,9 @@ class SuNeRFLoader:
             outputs = {k: torch.cat(v).view(*img_shape, -1).numpy() for k, v in
                        outputs.items()}
             return outputs
+
+    def normalize_datetime(self, time):
+        return normalize_datetime(time, self.seconds_per_dt, self.ref_time)
+
+    def unnormalize_datetime(self, time):
+        return unnormalize_datetime(time, self.seconds_per_dt, self.ref_time)

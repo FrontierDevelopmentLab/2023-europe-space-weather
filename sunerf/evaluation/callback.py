@@ -4,7 +4,8 @@ import numpy as np
 import torch
 import wandb
 from matplotlib import pyplot as plt, cm
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, LogNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from sunerf.data.utils import sdo_img_norm
 from astropy import units as u
@@ -14,25 +15,26 @@ from sunerf.utilities.data_loader import unnormalize_datetime
 # import sunpy
 # import copy
 
-def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs, density_map, testimg, z_vals_stratified,
+def plot_samples(channel_map, channel_map_coarse, distance_sun, distance_obs, density_map, testimg, z_vals_stratified,
                  z_vals_hierach, distance, cmap):
     # Log example images on wandb
     # # Plot example outputs
+    b_norm = LogNorm(vmin=np.nanmin(testimg), vmax=np.nanmax(testimg))
 
     fig, ax = plt.subplots(4, 3, figsize=(20, 15))
 
     channel_map = np.copy(channel_map)
     channel_map_coarse = np.copy(channel_map_coarse)
-    height_map_sun = np.copy(height_map_sun)
-    height_map_obs = np.copy(height_map_obs)
+    distance_sun = np.copy(distance_sun)
+    distance_obs = np.copy(distance_obs)
     density_map = np.copy(density_map)
 
     # get mask from target image for occulter
     mask = np.isnan(testimg[...,0])
     channel_map[mask, :] = np.nan
     channel_map_coarse[mask, :] = np.nan
-    height_map_sun[mask] = np.nan
-    height_map_obs[mask] = np.nan
+    distance_sun[mask] = np.nan
+    distance_obs[mask] = np.nan
     density_map[mask] = np.nan
 
     # TODO AND THEN MAKE SURE GREEN?
@@ -43,26 +45,32 @@ def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs
     # cmap1.set_bad(color='green')
 
     # tB
-    ax[0,0].imshow(testimg[..., 0], cmap=cmap, norm=sdo_img_norm)
+    ax[0,0].imshow(testimg[..., 0], cmap=cmap, norm=b_norm)
     ax[0,0].set_title(f'Target tB')
-    ax[0,1].imshow(channel_map[..., 0], cmap=cmap, norm=sdo_img_norm)
+    ax[0,1].imshow(channel_map[..., 0], cmap=cmap, norm=b_norm)
     ax[0,1].set_title(f'Prediction tB')
-    ax[0,2].imshow(channel_map_coarse[..., 0], cmap=cmap, norm=sdo_img_norm)
+    im = ax[0,2].imshow(channel_map_coarse[..., 0], cmap=cmap, norm=b_norm)
     ax[0,2].set_title(f'Coarse tB')
+    divider = make_axes_locatable(ax[0,2])
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
 
     # pB
-    ax[1,0].imshow(testimg[..., 1], cmap=cmap, norm=sdo_img_norm)
+    ax[1,0].imshow(testimg[..., 1], cmap=cmap, norm=b_norm)
     ax[1,0].set_title(f'Target pB')
-    ax[1,1].imshow(channel_map[..., 1], cmap=cmap, norm=sdo_img_norm)
+    ax[1,1].imshow(channel_map[..., 1], cmap=cmap, norm=b_norm)
     ax[1,1].set_title(f'Prediction pB')
-    ax[1,2].imshow(channel_map_coarse[..., 1], cmap=cmap, norm=sdo_img_norm)
+    im = ax[1,2].imshow(channel_map_coarse[..., 1], cmap=cmap, norm=b_norm)
     ax[1,2].set_title(f'Coarse pB')
+    divider = make_axes_locatable(ax[1,2])
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
 
     # height and density maps
-    ax[2,0].imshow(height_map_sun[..., 0], cmap='viridis')
-    ax[2,0].set_title(f'Height from Sun')
-    ax[2,1].imshow(height_map_obs[..., 0], cmap='viridis')
-    ax[2,1].set_title(f'Height from observer')
+    ax[2,0].imshow(distance_sun[..., 0], cmap='viridis')
+    ax[2,0].set_title(f'Distance from Sun')
+    ax[2,1].imshow(distance_obs[..., 0], cmap='viridis')
+    ax[2,1].set_title(f'Distance from observer')
     ax[2,2].imshow(density_map[..., 0], cmap='viridis' )
     ax[2,2].set_title(f'Density')
 
@@ -75,7 +83,7 @@ def plot_samples(channel_map, channel_map_coarse, height_map_sun, height_map_obs
     plt.close('all')
 
 
-def log_overview(images, poses, times, cmap):
+def log_overview(images, poses, times, cmap, seconds_per_dt, Mm_per_ds, ref_time):
     dirs = np.stack([np.sum([0, 0, -1] * pose[:3, :3], axis=-1) for pose in poses])
     origins = poses[:, :3, -1]
     colors = cm.get_cmap('viridis')(Normalize()(times))
@@ -86,7 +94,7 @@ def log_overview(images, poses, times, cmap):
         cs.append(c)
 
     iter_list = list(enumerate(images))
-    step = max(1, len(iter_list) // 50)
+    step = max(1, len(iter_list) // 10)
     for i, img in iter_list[::step]:
         fig = plt.figure(figsize=(16, 8), dpi=150)
         ax = plt.subplot(131, projection='3d')
@@ -118,15 +126,21 @@ def log_overview(images, poses, times, cmap):
 
         ax = plt.subplot(132)
         # plot corresponding image
-        ax.imshow(img[..., 0], norm=sdo_img_norm,  cmap=cmap)
+        im = ax.imshow(img[..., 0], norm=LogNorm(),  cmap=cmap)
         ax.set_axis_off()
-        ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
+        ax.set_title('Time: %s' % unnormalize_datetime(times[i], seconds_per_dt, ref_time).isoformat(' '))
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
 
         ax = plt.subplot(133)
         # plot corresponding image
-        ax.imshow(img[..., 1], norm=sdo_img_norm, cmap=cmap)
+        im = ax.imshow(img[..., 1], norm=LogNorm(), cmap=cmap)
         ax.set_axis_off()
-        ax.set_title('Time: %s' % unnormalize_datetime(times[i]).isoformat(' '))
+        ax.set_title('Time: %s' % unnormalize_datetime(times[i], seconds_per_dt, ref_time).isoformat(' '))
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
 
         wandb.log({'Overview': fig}, step=i)
         plt.close(fig)

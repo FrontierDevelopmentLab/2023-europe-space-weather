@@ -23,7 +23,7 @@ def get_rays(height: int, width: int, ref_pixel: PixelPair, focal_length: float,
     # Apply camera pose to directions
     rays_d = np.sum(directions[..., None, :] * c2w[:3, :3], axis=-1)
     # TODO double check normalization
-    # rays_d = rays_d / ((rays_d ** 2).sum(-1) ** 0.5)[..., None]
+    rays_d = rays_d / np.linalg.norm(rays_d, axis=-1, keepdims=True)
 
     # Origin is same for all directions (the optical center)
     rays_o = np.tile(c2w[None, :3, -1], [rays_d.shape[0], rays_d.shape[1], 1])

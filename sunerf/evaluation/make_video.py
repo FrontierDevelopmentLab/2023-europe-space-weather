@@ -31,7 +31,7 @@ from sunerf.data.utils import loadMap
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.train.ray_sampling import get_rays
 from sunerf.utilities.data_loader import loadAIAMap
-from sunerf.sunerf import SuNeRFModule
+from sunerf.model.sunerf import SuNeRFModule
 from sunerf.train.volume_render import nerf_forward
 from sunerf.irradiance.utilities.data_loader import FITSDataset
 from sunerf.irradiance.inference import ipredict

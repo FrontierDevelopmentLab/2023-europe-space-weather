@@ -9,7 +9,7 @@ from torch import nn
 from tqdm import tqdm
 
 from sunerf.data.utils import sdo_cmaps
-from sunerf.train.model import PositionalEncoder
+from sunerf.model.model import PositionalEncoder
 from sunerf.utilities.data_loader import normalize_datetime
 
 chk_path = '/mnt/nerf-data/sunerf_ensemble/ensemble_4/save_state.snf'

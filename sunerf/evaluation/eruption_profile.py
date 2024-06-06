@@ -16,7 +16,7 @@ from torch import nn
 from tqdm import tqdm
 
 from sunerf.data.utils import sdo_cmaps, sdo_norms
-from sunerf.train.model import PositionalEncoder
+from sunerf.model.model import PositionalEncoder
 from sunerf.utilities.data_loader import normalize_datetime
 
 chk_path = '/mnt/nerf-data/eruption/save_state.snf'

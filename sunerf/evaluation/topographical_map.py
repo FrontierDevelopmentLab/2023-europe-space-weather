@@ -4,13 +4,12 @@ from datetime import datetime
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from matplotlib.colors import Normalize
 from sunpy.map import Map
 from torch import nn
 from tqdm import tqdm
 
 from sunerf.data.utils import sdo_cmaps
-from sunerf.train.model import PositionalEncoder
+from sunerf.model.model import PositionalEncoder
 from sunerf.train.volume_render import cumprod_exclusive
 from sunerf.utilities.data_loader import normalize_datetime
 from sunerf.utilities.reprojection import create_heliographic_map
