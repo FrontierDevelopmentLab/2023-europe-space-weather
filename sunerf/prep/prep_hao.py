@@ -72,7 +72,8 @@ def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
     
     pixel_radii = np.sqrt((pixel_coords.Tx-solar_center.Tx)**2 + \
                       (pixel_coords.Ty-solar_center.Ty)**2)
-    mask = pixel_radii < s_map.rsun_obs*occ_rad.to(u.R_sun).value
+    mask = ((pixel_radii < s_map.rsun_obs * occ_rad.to_value(u.R_sun)) |
+            (pixel_radii > s_map.rsun_obs * 100))
 
     
     data = s_map.data

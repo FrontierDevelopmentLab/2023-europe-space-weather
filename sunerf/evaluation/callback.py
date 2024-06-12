@@ -83,7 +83,7 @@ def plot_samples(channel_map, channel_map_coarse, distance_sun, distance_obs, de
     plt.close('all')
 
 
-def log_overview(images, poses, times, cmap, seconds_per_dt, Mm_per_ds, ref_time):
+def log_overview(images, poses, times, cmap, seconds_per_dt, Rs_per_ds, ref_time):
     dirs = np.stack([np.sum([0, 0, -1] * pose[:3, :3], axis=-1) for pose in poses])
     origins = poses[:, :3, -1]
     colors = cm.get_cmap('viridis')(Normalize()(times))

@@ -17,12 +17,12 @@ from sunerf.train.sampling import SphericalSampler, HierarchicalSampler
 from sunerf.train.scaling import ImageLogScaling
 from sunerf.train.volume_render import nerf_forward, jacobian
 from sunerf.utilities.data_loader import NeRFDataModule
-
+from astropy import units as u
 
 class SuNeRFModule(LightningModule):
-    def __init__(self, Mm_per_ds, seconds_per_dt,
+    def __init__(self, Rs_per_ds, seconds_per_dt,
                  lambda_continuity=0, lambda_radial_regularization=0, lambda_velocity_regularization=0,
-                 lambda_tB=1.0, lambda_pB=1.0,
+                 lambda_brightness=1.0,
                  sampling_config={'near': -1.4e5, 'far': 1.4e5},
                  model_config={}, lr_config={'start': 1e-4, 'end': 1e-5, 'iterations': 1e6},
                  hierachical_sampling_config={},
@@ -34,28 +34,28 @@ class SuNeRFModule(LightningModule):
         self.lambda_continuity = lambda_continuity
         self.lambda_radial_regularization = lambda_radial_regularization
         self.lambda_velocity_regularization = lambda_velocity_regularization
-        self.lambda_tB = lambda_tB
-        self.lambda_pB = lambda_pB
+        self.lambda_brightness = lambda_brightness
 
         self.lr_config = lr_config
 
         # setup sampling strategies
-        self.sample_stratified = SphericalSampler(**sampling_config, Mm_per_ds=Mm_per_ds)
+        self.sample_stratified = SphericalSampler(**sampling_config, Rs_per_ds=Rs_per_ds)
         self.sample_hierarchical = HierarchicalSampler(**hierachical_sampling_config)
         self.image_scaling = ImageLogScaling(**image_scaling_config)
-        self.rendering = ThompsonScattering(Mm_per_ds=Mm_per_ds)
+        self.rendering = ThompsonScattering(Rs_per_ds=Rs_per_ds)
 
         # Model Loading
-        self.rho_model = NeRF(d_output=1)
-        self.v_model = NeRF(d_output=3)
+        self.model = NeRF(d_output=4, **model_config)
         self.mse_loss = nn.MSELoss()
 
-        v_wind = 400e-3 / Mm_per_ds * seconds_per_dt  # Mm/s --> ds/dt
-        self.register_buffer('v_wind', torch.tensor(v_wind, dtype=torch.float32))
+        v_min = (200.0 * u.km / u.s).to_value(u.R_sun / u.s) / Rs_per_ds * seconds_per_dt  # Mm/s --> ds/dt
+        self.register_buffer('velocity_min', torch.tensor(v_min, dtype=torch.float32))
+        v_max = (800.0 * u.km / u.s).to_value(u.R_sun / u.s) / Rs_per_ds * seconds_per_dt  # Mm/s --> ds/dt
+        self.register_buffer('velocity_max', torch.tensor(v_max, dtype=torch.float32))
 
 
     def configure_optimizers(self):
-        params = list(self.rho_model.parameters()) + list(self.v_model.parameters())
+        params = list(self.model.parameters())
         self.optimizer = torch.optim.Adam(params, lr=self.lr_config['start'])
         gamma = (self.lr_config['end'] / self.lr_config['start']) ** (1 / self.lr_config['iterations'])
 
@@ -68,7 +68,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
 
         outputs = nerf_forward(rays_o, rays_d, time,
-                               model=self.rho_model, sampler=self.sample_stratified,
+                               model=self.model, sampler=self.sample_stratified,
                                hierarchical_sampler=self.sample_hierarchical,
                                rendering=self.rendering)
 
@@ -80,58 +80,57 @@ class SuNeRFModule(LightningModule):
         # backpropagation
         pred_img = self.image_scaling(outputs['pixel_B'])
         target_img = self.image_scaling(target_img)
-        b_loss = self.lambda_tB * self.mse_loss(pred_img[..., 0], target_img[..., 0]) + \
-                 self.lambda_pB * self.mse_loss(pred_img[..., 1], target_img[..., 1])
+
+        b_loss = (self.mse_loss(pred_img[..., 0], target_img[..., 0]) +
+                  self.mse_loss(pred_img[..., 1], target_img[..., 1]))
 
         # PINN
-
         query_points = batch['random']
         query_points.requires_grad = True
 
         radial = query_points[..., :3] / (torch.norm(query_points[..., :3], dim=-1, keepdim=True) + 1e-8)
-        solar_wind = self.v_wind * radial
 
-        log_rho = self.rho_model(query_points)
+        out = self.model(query_points)
+        log_rho = out[:, 0]
+        velocity = out[:, 1:]
         rho = 10 ** log_rho
-        velocity = self.v_model(query_points)
 
-        jac_rho = jacobian(log_rho, query_points)
-        jac_v = jacobian(velocity, query_points)
+        out = torch.cat([rho[..., None], velocity], dim=-1)
 
-        jac_matrix = torch.cat([jac_rho, jac_v], dim=1)
+        jac_matrix = jacobian(out, query_points)
 
-        dlogRho_dx = jac_matrix[:, 0, 0]
+        dRho_dx = jac_matrix[:, 0, 0]
         dVx_dx = jac_matrix[:, 1, 0]
         dVy_dx = jac_matrix[:, 2, 0]
         dVz_dx = jac_matrix[:, 3, 0]
 
-        dlogRho_dy = jac_matrix[:, 0, 1]
+        dRho_dy = jac_matrix[:, 0, 1]
         dVx_dy = jac_matrix[:, 1, 1]
         dVy_dy = jac_matrix[:, 2, 1]
         dVz_dy = jac_matrix[:, 3, 1]
 
-        dlogRho_dz = jac_matrix[:, 0, 2]
+        dRho_dz = jac_matrix[:, 0, 2]
         dVx_dz = jac_matrix[:, 1, 2]
         dVy_dz = jac_matrix[:, 2, 2]
         dVz_dz = jac_matrix[:, 3, 2]
 
-        dlogRho_dt = jac_matrix[:, 0, 3]
+        dRho_dt = jac_matrix[:, 0, 3]
         dVx_dt = jac_matrix[:, 1, 3]
         dVy_dt = jac_matrix[:, 2, 3]
         dVz_dt = jac_matrix[:, 3, 3]
 
-        grad_logRho = torch.stack([dlogRho_dx, dlogRho_dy, dlogRho_dz], -1)
-        div_V = (dVx_dx + dVy_dy + dVz_dz)
-        v_dot_grad_Rho = (velocity * grad_logRho).sum(-1)
-        continuity_eq = dlogRho_dt + div_V + v_dot_grad_Rho
-        continuity_loss = continuity_eq.pow(2).mean()
+        # grad_logRho = torch.stack([dlogRho_dx, dlogRho_dy, dlogRho_dz], -1)
+        # div_V = (dVx_dx + dVy_dy + dVz_dz)
+        # v_dot_grad_Rho = (velocity * grad_logRho).sum(-1)
+        # continuity_eq = dlogRho_dt + div_V + v_dot_grad_Rho
+        # continuity_loss = continuity_eq.pow(2).mean()
 
-        # div_v = (dVx_dx + dVy_dy + dVz_dz)
-        # grad_rho = torch.stack([dRho_dx, dRho_dy, dRho_dz], -1)
-        # v_dot_grad_rho = (velocity * grad_rho).sum(-1)
-        # continuity_loss = dRho_dt + rho * div_v + v_dot_grad_rho
-        # continuity_loss = continuity_loss.abs()
-        # continuity_loss = continuity_loss.mean() / rho.detach().mean()
+        div_v = (dVx_dx + dVy_dy + dVz_dz)
+        grad_rho = torch.stack([dRho_dx, dRho_dy, dRho_dz], -1)
+        v_dot_grad_rho = (velocity * grad_rho).sum(-1)
+        continuity_loss = dRho_dt + rho * div_v + v_dot_grad_rho
+        continuity_loss = continuity_loss.abs()
+        continuity_loss = continuity_loss.mean() / rho.mean()
 
         # regularize vectors to point radially outwards
         # v_unit = v / (torch.norm(v, dim=-1, keepdim=True) + 1e-8)
@@ -141,13 +140,13 @@ class SuNeRFModule(LightningModule):
         #
         # # regularize velocity
         velocity_norm = torch.norm(velocity, dim=-1)
-        min_velocity_regularization_loss = torch.relu(self.v_wind - velocity_norm).pow(2).mean()
+        min_velocity_regularization_loss = torch.relu(self.velocity_min - velocity_norm).pow(2).mean()
 
         velocity_unit = velocity / (torch.norm(velocity, dim=-1, keepdim=True) + 1e-8)
         radial_regularization_loss = (1 - torch.sum(velocity_unit * radial, dim=-1)).pow(2).mean()
         # velocity_regularization_loss = torch.clip(torch.norm(v - solar_wind, dim=-1) - self.v_tolerance, min=0).mean()
 
-        loss = (b_loss +
+        loss = (self.lambda_brightness * b_loss +
                 self.lambda_continuity * continuity_loss +
                 self.lambda_velocity_regularization * min_velocity_regularization_loss +
                 self.lambda_radial_regularization * radial_regularization_loss)
@@ -179,7 +178,7 @@ class SuNeRFModule(LightningModule):
         rays_o, rays_d = rays[:, 0], rays[:, 1]
 
         outputs = nerf_forward(rays_o, rays_d, time,
-                               model=self.rho_model, sampler=self.sample_stratified,
+                               model=self.model, sampler=self.sample_stratified,
                                hierarchical_sampler=self.sample_hierarchical,
                                rendering=self.rendering)
 
@@ -245,14 +244,14 @@ class SuNeRFModule(LightningModule):
 def save_state(sunerf: SuNeRFModule, data_module: NeRFDataModule, save_path, config_data):
     output_path = '/'.join(save_path.split('/')[0:-1])
     os.makedirs(output_path, exist_ok=True)
-    torch.save({'model': {'rho': sunerf.rho_model, 'v': sunerf.v_model},
+    torch.save({'model': sunerf.model,
                 'wavelength': data_module.wavelength,
                 'sampling': {'hierarchical': sunerf.sample_hierarchical, 'stratified': sunerf.sample_stratified},
                 'image_scaling': sunerf.image_scaling,
                 'rendering': sunerf.rendering,
                 'config': config_data,
                 'times': data_module.times, 'radius_range': data_module.radius_range,
-                'Mm_per_ds': data_module.Mm_per_ds, 'seconds_per_dt': data_module.seconds_per_dt,
+                'Rs_per_ds': data_module.Rs_per_ds, 'seconds_per_dt': data_module.seconds_per_dt,
                 'test_kwargs': data_module.test_kwargs,
                 'ref_time': data_module.ref_time,
                 },

@@ -5,12 +5,12 @@ from torch import nn
 
 class ThompsonScattering(nn.Module):
 
-    def __init__(self, Mm_per_ds):
+    def __init__(self, Rs_per_ds):
         super().__init__()
-        C_0 = (8.69e-7 * u.cm ** 2).to_value(u.Mm ** 2) / (Mm_per_ds ** 2)
+        C_0 = (8.69e-7 * u.cm ** 2).to_value(u.R_sun ** 2) / (Rs_per_ds ** 2)
         self.register_buffer('limb_darkening_coeff', torch.tensor(0.63, dtype=torch.float32))
         self.register_buffer('C_0', torch.tensor(C_0, dtype=torch.float32))
-        self.register_buffer('solar_radius', torch.tensor((1 * u.solRad).to_value(u.Mm) / Mm_per_ds, dtype=torch.float32))
+        self.register_buffer('solar_radius', torch.tensor((1 * u.solRad).to_value(u.R_sun) / Rs_per_ds, dtype=torch.float32))
 
     def forward(self, log_rho: torch.Tensor,  # (batch, sampling_points, density_e)
                 query_points: torch.Tensor,  # (batch, sampling_points, coord(x,y,z) )
@@ -69,8 +69,8 @@ class ThompsonScattering(nn.Module):
         D = (1 / 8) * (5 + torch.sin(omega) ** 2 - cos2_sin * (5 - torch.sin(omega) ** 2) * ln)
 
         # equations 23, 24, 29
-        intensity_T = self.C_0 * ((1 - u_const) * C + u_const * D)  # I_T in paper - transverse
-        intensity_pB = self.C_0 * torch.sin(chi) ** 2 * ((1 - u_const) * A + u_const * B)  # I_p in Paper
+        intensity_T = ((1 - u_const) * C + u_const * D)  # I_T in paper - transverse
+        intensity_pB = torch.sin(chi) ** 2 * ((1 - u_const) * A + u_const * B)  # I_p in Paper
 
         intensity_tB = 2 * intensity_T - intensity_pB  # I_tot in paper
         # Intensities being negative is unphysical
@@ -86,12 +86,12 @@ class ThompsonScattering(nn.Module):
 
         # intensity (total and polarised) from all electrons
         # for one electron * electron density * weighted by line element ds- separation between sampling points
-        point_tB = intensity_tB * rho * dists
-        point_pB = intensity_pB * rho * dists
+        point_tB = (self.C_0 * rho) * intensity_tB * dists
+        point_pB = (self.C_0 * rho) * intensity_pB * dists
 
         # sum all intensity contributions along LOS
-        pixel_tB = point_tB.sum(1)[:, None]
-        pixel_pB = point_pB.sum(1)[:, None]
+        pixel_tB = point_tB.sum(-1)[..., None]
+        pixel_pB = point_pB.sum(-1)[..., None]
         # print("pixel tB smaller than 0? - {} - Value: {}".format((pixel_tB < 0).any(),(pixel_tB < 0).nonzero()))
         # print("Intensity tB smaller than 0? - {} - Value: {}".format((intensity_tB < 0).any(),(intensity_tB < 0).nonzero()))
         # height and density maps

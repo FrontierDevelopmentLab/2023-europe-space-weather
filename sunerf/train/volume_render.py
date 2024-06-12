@@ -61,6 +61,8 @@ def nerf_forward(rays_o: torch.Tensor,
         sample_out = sampler(rays_o, rays_d)
         query_points, z_vals = sample_out['points'], sample_out['z_vals']
 
+        # print(f'Query points range: {torch.norm(query_points, dim=-1).min()} -- {torch.norm(query_points, dim=-1).max()}')
+
         # add time to query points
         exp_times = times[:, None].repeat(1, query_points.shape[1], 1)
         query_points_time = torch.cat([query_points, exp_times], -1)  # --> (x, y, z, t)

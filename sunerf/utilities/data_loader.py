@@ -3,13 +3,15 @@ import logging
 import multiprocessing
 import os
 from datetime import datetime, timedelta
+from itertools import repeat
 from warnings import simplefilter
 
 import numpy as np
 import torch
 from astropy import units as u
 from pytorch_lightning import LightningDataModule
-from sunpy.map import Map
+from sunpy.coordinates import frames
+from sunpy.map import Map, all_coordinates_from_map
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -20,18 +22,19 @@ from sunerf.train.ray_sampling import get_rays
 
 class NeRFDataModule(LightningDataModule):
 
-    def __init__(self, data_path_pB, data_path_tB, working_dir, Mm_per_ds, seconds_per_dt,
-                 ref_time=None, radius_range=[1.461e+4, 1.4e+5],
+    def __init__(self, data_path_pB, data_path_tB, working_dir, Rs_per_ds, seconds_per_dt,
+                 ref_time=None, radius_range=[21.5, 100],
                  batch_size=int(2 ** 10), num_workers=None, debug=False):
         super().__init__()
-        self.Mm_per_ds = Mm_per_ds
+        self.Rs_per_ds = Rs_per_ds
         self.seconds_per_dt = seconds_per_dt
 
-        radius_range = np.array(radius_range) / Mm_per_ds
+        radius_range = np.array(radius_range) / Rs_per_ds
+        print('Radius range ', radius_range)
         self.radius_range = radius_range
 
         logging.info('Load data')
-        images, poses, rays, times, focal_lengths, wavelength = get_data(data_path_pB, data_path_tB, debug)
+        images, poses, rays, times, focal_lengths, wavelength = get_data(data_path_pB, data_path_tB, Rs_per_ds, debug)
 
         # normalize data
         self.ref_time = ref_time if ref_time is not None else times[0]
@@ -97,8 +100,9 @@ class NeRFDataModule(LightningDataModule):
         self.valid_data = TensorDataset({'rays': torch.tensor(self.valid_rays, dtype=torch.float32),
                                          'times': torch.tensor(self.valid_times, dtype=torch.float32),
                                          'images': torch.tensor(self.valid_images, dtype=torch.float32)})
-        self.train_data = BatchesDataset({'rays': self.train_rays, 'times': self.train_times, 'images': self.train_images},
-                                         batch_size=self.batch_size)
+        self.train_data = BatchesDataset(
+            {'rays': self.train_rays, 'times': self.train_times, 'images': self.train_images},
+            batch_size=self.batch_size)
         self.points_data = RandomCoordinateDataset(radius_range, [np.min(times), np.max(times)], self.points_batch_size)
 
     def _flatten_data(self, rays, times, images):
@@ -147,6 +151,7 @@ class BatchesDataset(Dataset):
     def clear(self):
         [os.remove(f) for f in self.batches_file_paths.values()]
 
+
 class TensorDataset(Dataset):
 
     def __init__(self, tensor_dict, batch_size=2 ** 13, **kwargs):
@@ -179,7 +184,7 @@ class NumpyFilesDataset(Dataset):
         return [np.copy(np.load(batch_file, mmap_mode='r')[idx]) for batch_file in self.paths]
 
 
-def get_data(data_path_pB, data_path_tB, debug=False):
+def get_data(data_path_pB, data_path_tB, Rs_per_ds, debug=False):
     # HEO 1276 tB files, 1351 pB files
     # can assume matching names have matching obs times and angles
     s_maps_pB = sorted(glob.glob(data_path_pB))
@@ -190,8 +195,8 @@ def get_data(data_path_pB, data_path_tB, debug=False):
         s_maps_tB = s_maps_tB[::10]
 
     with multiprocessing.Pool(os.cpu_count()) as p:
-        data_pB = [d for d in tqdm(p.imap(_load_map_data, s_maps_pB), total=len(s_maps_pB))]
-        data_tB = [d for d in tqdm(p.imap(_load_map_data, s_maps_tB), total=len(s_maps_tB))]
+        data_pB = [d for d in tqdm(p.imap(_load_map_data, zip(s_maps_pB, repeat(Rs_per_ds))), total=len(s_maps_pB))]
+        data_tB = [d for d in tqdm(p.imap(_load_map_data, zip(s_maps_tB, repeat(Rs_per_ds))), total=len(s_maps_tB))]
 
     _, poses, rays, times, focal_lengths = list(map(list, zip(*data_tB)))
 
@@ -201,24 +206,25 @@ def get_data(data_path_pB, data_path_tB, debug=False):
     return images, poses, rays, times, focal_lengths, ref_wavelength
 
 
-def _load_map_data(map_path):
+def _load_map_data(data):
+    map_path, Rs_per_ds = data
     simplefilter('ignore')
     s_map = Map(map_path)
     # s_map = s_map.rotate(recenter=True, order=3)
     # compute focal length
     scale = s_map.scale[0]  # scale of pixels [arcsec/pixel]
     W = s_map.data.shape[0]  # number of pixels
-    focal = (.5 * W) / np.arctan(0.5 * (scale * W * u.pix).to(u.deg).value * np.pi / 180)
+    focal = (.5 * W) / np.arctan(0.5 * (scale * W * u.pix).to_value(u.rad))
 
     time = s_map.date.datetime
 
-    print('COORDS', s_map.heliographic_longitude, s_map.heliographic_latitude)
-    pose = pose_spherical(-s_map.heliographic_longitude.to(u.deg).value,
-                          s_map.heliographic_latitude.to(u.deg).value,
-                          s_map.dsun.to_value(u.solRad)).float().numpy()
+    pose = pose_spherical(-s_map.heliographic_longitude.to(u.rad).value,
+                          s_map.heliographic_latitude.to(u.rad).value,
+                          s_map.dsun.to_value(u.R_sun) / Rs_per_ds).float().numpy()
 
     image = s_map.data.astype(np.float32)
-    all_rays = np.stack(get_rays(image.shape[0], image.shape[1], s_map.reference_pixel, focal, pose), -2)
+    img_coords = all_coordinates_from_map(s_map).transform_to(frames.Helioprojective)
+    all_rays = np.stack(get_rays(img_coords, pose), -2)
 
     # rays_o = all_rays[:, :, 0, :]
     # rays_d = all_rays[:, :, 1, :]

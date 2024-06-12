@@ -11,7 +11,7 @@ from torch.nn import DataParallel
 from sunerf.train.coordinate_transformation import pose_spherical
 from sunerf.model.model import PositionalEncoder
 from sunerf.train.ray_sampling import get_rays
-from sunerf.train.volume_render import nerf_forward
+from sunerf.train.volume_render import nerf_forward, jacobian
 from sunerf.utilities.data_loader import normalize_datetime, unnormalize_datetime
 
 
@@ -27,16 +27,15 @@ class SuNeRFLoader:
         self.times = state['times']
         self.config = state['config']
         self.device = device
-        self.rho_model = state['model']['rho']
-        self.v_model = state['model']['v']
+        self.model = state['model']
 
-        self.rho_model = DataParallel(self.rho_model).to(device)
-        self.v_model = DataParallel(self.v_model).to(device)
+        self.model = DataParallel(self.model).to(device)
         self.sampler = state['sampling']['stratified']
         self.hierarchical_sampler = state['sampling']['hierarchical']
         self.rendering = state['rendering']
         self.seconds_per_dt = state['seconds_per_dt']
-        self.Mm_per_ds = state['Mm_per_ds']
+        self.Rs_per_ds = state['Rs_per_ds']
+        self.Mm_per_ds = self.Rs_per_ds * (1 * u.R_sun).to_value(u.Mm)
         self.ref_time = state['ref_time']
 
     @property
@@ -89,3 +88,67 @@ class SuNeRFLoader:
 
     def unnormalize_datetime(self, time):
         return unnormalize_datetime(time, self.seconds_per_dt, self.ref_time)
+
+    def load_coords(self, query_points_npy):
+        target_shape = query_points_npy.shape[:-1]
+        query_points = torch.from_numpy(query_points_npy).float()
+
+        flat_query_points = query_points.reshape(-1, 4)
+        batch_size = 2048
+        n_batches = np.ceil(len(flat_query_points) / batch_size).astype(int)
+
+        density_list = []
+        velocity_list = []
+        continuity_loss_list = []
+        for j in range(n_batches):
+            batch = flat_query_points[j * batch_size:(j + 1) * batch_size].to(self.device)
+            batch.requires_grad = True
+            out = self.model(batch)
+
+            rho = 10 ** out[:, 0]
+            velocity = out[:, 1:]
+
+            out = torch.cat([rho[..., None], velocity], 1)
+            jac_matrix = jacobian(out, batch)
+
+            dRho_dx = jac_matrix[:, 0, 0]
+            dVx_dx = jac_matrix[:, 1, 0]
+            dVy_dx = jac_matrix[:, 2, 0]
+            dVz_dx = jac_matrix[:, 3, 0]
+
+            dRho_dy = jac_matrix[:, 0, 1]
+            dVx_dy = jac_matrix[:, 1, 1]
+            dVy_dy = jac_matrix[:, 2, 1]
+            dVz_dy = jac_matrix[:, 3, 1]
+
+            dRho_dz = jac_matrix[:, 0, 2]
+            dVx_dz = jac_matrix[:, 1, 2]
+            dVy_dz = jac_matrix[:, 2, 2]
+            dVz_dz = jac_matrix[:, 3, 2]
+
+            dRho_dt = jac_matrix[:, 0, 3]
+            dVx_dt = jac_matrix[:, 1, 3]
+            dVy_dt = jac_matrix[:, 2, 3]
+            dVz_dt = jac_matrix[:, 3, 3]
+
+            div_v = (dVx_dx + dVy_dy + dVz_dz)
+            grad_rho = torch.stack([dRho_dx, dRho_dy, dRho_dz], -1)
+            v_dot_grad_rho = (velocity * grad_rho).sum(-1)
+            continuity_loss = dRho_dt + rho * div_v + v_dot_grad_rho
+            continuity_loss = continuity_loss.abs()
+
+            density = rho / (self.Mm_per_ds * 1e8) ** 3  # Ne/ds^3 --> Ne/cm^3
+            velocity = velocity * (self.Mm_per_ds * 1e3) / self.seconds_per_dt  # km/s
+
+            density_list.append(density.detach().cpu())
+            velocity_list.append(velocity.detach().cpu())
+            continuity_loss_list.append(continuity_loss.detach().cpu())
+
+        density = torch.cat(density_list, 0)
+        velocity = torch.cat(velocity_list, 0)
+        continuity_loss = torch.cat(continuity_loss_list, 0)
+
+        density = density.view(target_shape).numpy()
+        velocity = velocity.view(target_shape + velocity.shape[-1:]).numpy()
+        continuity_loss = continuity_loss.view(target_shape).numpy()
+        return {'density': density, 'velocity': velocity, 'continuity_loss': continuity_loss}

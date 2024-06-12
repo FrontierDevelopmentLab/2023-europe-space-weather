@@ -36,7 +36,7 @@ if __name__ == '__main__':
     model_config = config['model'] if 'model' in config else {}
     module_config = config['module'] if 'module' in config else {}
     sunerf = SuNeRFModule(sampling_config=config['sampling_config'], **model_config, cmap=cmap,
-                          Mm_per_ds=data_module.Mm_per_ds, seconds_per_dt=data_module.seconds_per_dt,
+                          Rs_per_ds=data_module.Rs_per_ds, seconds_per_dt=data_module.seconds_per_dt,
                           **module_config)
 
     # manually laod --> automatic load checkpoint causes error
@@ -74,7 +74,7 @@ if __name__ == '__main__':
                       )
 
     log_overview(data_module.images, data_module.poses, data_module.times, cmap,
-                 data_module.seconds_per_dt, data_module.Mm_per_ds, data_module.ref_time)
+                 data_module.seconds_per_dt, data_module.Rs_per_ds, data_module.ref_time)
 
     logging.info('Start model training')
     trainer.fit(sunerf, data_module, ckpt_path='last')

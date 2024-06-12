@@ -16,7 +16,7 @@ class NeRF(nn.Module):
             n_layers: int = 8,
             d_filter: int = 512,
             skip: Tuple[int] = (),
-            encoding_config=None
+            encoding=None
     ):
         super().__init__()
         self.d_input = d_input
@@ -25,10 +25,12 @@ class NeRF(nn.Module):
 
         # encoding_config = {'type': 'positional', 'num_freqs': 20} if encoding_config is None else encoding_config
         # encoding_type = encoding_config.pop('type')
-        # if encoding_type == 'positional':
-        enc = PositionalEncoder(d_input=d_input, n_freqs=20, log_space=True)
-        in_layer = nn.Linear(enc.d_output, d_filter)
-        self.in_layer = nn.Sequential(enc, in_layer)
+        if encoding == 'positional':
+            enc = PositionalEncoder(d_input=d_input, n_freqs=10)
+            in_layer = nn.Linear(enc.d_output, d_filter)
+            self.in_layer = nn.Sequential(enc, in_layer)
+        else:
+            self.in_layer = nn.Linear(d_input, d_filter)
         # elif encoding_type == 'none' or encoding_type is None:
         #     self.in_layer = nn.Linear(d_input, d_filter)
         # else:
@@ -79,16 +81,17 @@ class Sine(nn.Module):
 
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, in_features, num_freqs=20):
+    def __init__(self, d_input, n_freqs=20):
         super().__init__()
-        frequencies = torch.randn(num_freqs, in_features, dtype=torch.float32)
+        frequencies = torch.stack([torch.linspace(-3, 9, n_freqs, dtype=torch.float32) for _ in range(d_input)], -1)
         self.frequencies = nn.Parameter(frequencies[None, :, :], requires_grad=True)
-        self.d_output = num_freqs * 2 * in_features
+        self.d_output = n_freqs * 2 * d_input
 
     def forward(self, x):
         # x = (batch, rays, coords)
-        encoded = x[:, None] * torch.pi * 2 ** self.frequencies
-        encoded = torch.cat([torch.sin(encoded), torch.cos(encoded)], -1)
+        encoded = x[:, None, :] * torch.pi * 2 ** self.frequencies
+        normalization = (torch.pi * 2 ** self.frequencies)
+        encoded = torch.cat([torch.sin(encoded) / normalization, torch.cos(encoded) / normalization], -1)
         encoded = encoded.reshape(x.shape[0], -1)
         return encoded
 
@@ -98,7 +101,7 @@ class PositionalEncoder(nn.Module):
     Sine-cosine positional encoder for input points.
     """
 
-    def __init__(self, d_input: int, n_freqs: int, scale_factor: float = 340., log_space: bool = False):
+    def __init__(self, d_input: int, n_freqs: int, scale_factor: float = 340., log_space: bool = True):
         """
 
         Parameters
@@ -116,7 +119,7 @@ class PositionalEncoder(nn.Module):
 
         # Define frequencies in either linear or log scale
         if self.log_space:
-            freq_bands = 2. ** torch.linspace(0., self.n_freqs - 1, self.n_freqs)
+            freq_bands = 2. ** torch.linspace(-(self.n_freqs - 1), self.n_freqs - 1, self.n_freqs)
         else:
             freq_bands = torch.linspace(2. ** 0., 2. ** (self.n_freqs - 1), self.n_freqs)
             print('freq bands', freq_bands)
@@ -128,9 +131,10 @@ class PositionalEncoder(nn.Module):
         r"""
         Apply positional encoding to input.
         """
+        f = self.freq_bands[None, :, None]
         enc = [x,
-               torch.sin(x[:, None, :] * self.freq_bands[None, :, None] / self.scale_factor).reshape(x.shape[0], -1),
-               torch.cos(x[:, None, :] * self.freq_bands[None, :, None] / self.scale_factor).reshape(x.shape[0], -1)
+               (torch.sin(x[:, None, :] * f) / f).reshape(x.shape[0], -1),
+               (torch.cos(x[:, None, :] * f) / f).reshape(x.shape[0], -1)
                ]
         return torch.concat(enc, dim=-1)
 

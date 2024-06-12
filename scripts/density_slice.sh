@@ -13,3 +13,4 @@ conda activate lightning
 cd /glade/u/home/rjarolim/projects/sunerf-cme
 
 python -i -m sunerf.evaluation.density_slice
+python -i -m sunerf.evaluation.density_cube_comparison

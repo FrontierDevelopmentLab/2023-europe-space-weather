@@ -65,12 +65,12 @@ def sample_non_uniform_box(
 
 class SphericalSampler(torch.nn.Module):
 
-    def __init__(self, near, far, Mm_per_ds, n_samples=64, perturb=True):
+    def __init__(self, near, far, Rs_per_ds, n_samples=64, perturb=True):
         super().__init__()
         self.perturb = perturb
 
-        self.register_buffer('near', torch.tensor(near / Mm_per_ds, dtype=torch.float32))
-        self.register_buffer('far', torch.tensor(far / Mm_per_ds, dtype=torch.float32))
+        self.register_buffer('near', torch.tensor(near / Rs_per_ds, dtype=torch.float32))
+        self.register_buffer('far', torch.tensor(far / Rs_per_ds, dtype=torch.float32))
 
         t_vals = torch.linspace(0., 1., n_samples)[None]
         self.register_buffer('t_vals', torch.tensor(t_vals, dtype=torch.float32))
@@ -88,15 +88,16 @@ class SphericalSampler(torch.nn.Module):
 
         # for occultor disc this should never happen (rays don't hit the solar surface)
         # solve quadratic equation --> find points at 1 solar radii
-        # a = rays_d.pow(2).sum(-1)
-        # b = (2 * rays_o * rays_d).sum(-1)
-        # c = rays_o.pow(2).sum(-1) - 1 ** 2
-        # dist_far = (-b - torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
+        a = rays_d.pow(2).sum(-1)
+        b = (2 * rays_o * rays_d).sum(-1)
+        c = rays_o.pow(2).sum(-1) - 100 ** 2
+        dist_near = (-b - torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
+        dist_far = (-b + torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
 
         # dist_far[torch.isnan(dist_far)] = projected_far[torch.isnan(dist_far)]
-        dist_far = projected_far
+        # dist_far = projected_far
 
-        z_vals = projected_near[:, None] * (1. - self.t_vals) + dist_far[:, None] * (self.t_vals)
+        z_vals = dist_near[:, None] * (1. - self.t_vals) + dist_far[:, None] * (self.t_vals)
 
         # Draw uniform samples from bins along ray
         if self.perturb:
