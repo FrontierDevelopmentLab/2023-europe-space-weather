@@ -7,10 +7,11 @@ from itertools import repeat
 from warnings import simplefilter
 
 import numpy as np
+import scipy
 import torch
 from astropy import units as u
+from dateutil.parser import parse
 from pytorch_lightning import LightningDataModule
-from sunpy.coordinates import frames
 from sunpy.map import Map, all_coordinates_from_map
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data import Dataset
@@ -23,8 +24,9 @@ from sunerf.train.ray_sampling import get_rays
 class NeRFDataModule(LightningDataModule):
 
     def __init__(self, data_path_pB, data_path_tB, working_dir, Rs_per_ds, seconds_per_dt,
-                 ref_time=None, radius_range=[21.5, 100],
-                 batch_size=int(2 ** 10), num_workers=None, debug=False):
+                 ref_time=None, radius_range=[20.0, 130],
+                 batch_size=int(2 ** 10), num_workers=None, debug=False,
+                 validation_cube=None):
         super().__init__()
         self.Rs_per_ds = Rs_per_ds
         self.seconds_per_dt = seconds_per_dt
@@ -100,6 +102,53 @@ class NeRFDataModule(LightningDataModule):
         self.valid_data = TensorDataset({'rays': torch.tensor(self.valid_rays, dtype=torch.float32),
                                          'times': torch.tensor(self.valid_times, dtype=torch.float32),
                                          'images': torch.tensor(self.valid_images, dtype=torch.float32)})
+        # slice data set
+        query_points_npy = np.stack(np.meshgrid(
+            np.linspace(-100, 100, 512),
+            np.linspace(-100, 100, 512),
+            [0],
+            (np.max(times) - np.min(times)) / 2), -1).astype(np.float32)
+
+        radius = np.sqrt(np.sum(query_points_npy[:, :, 0, 0, :2] ** 2, axis=-1))
+        mask = (radius < 21.5) | (radius > 100)
+        query_points_npy[mask] = np.nan
+        query_points_npy = query_points_npy.reshape(-1, 4)
+
+        self.slice_valid_data = TensorDataset({'query_points': torch.tensor(query_points_npy, dtype=torch.float32)})
+
+        if validation_cube is not None:
+            o = scipy.io.readsav(validation_cube)
+            date0 = parse("2010-04-03T09:04:00.000")
+            time = date0 + timedelta(hours=float(o['this_time']))
+            time = normalize_datetime(time, seconds_per_dt, self.ref_time)
+
+            dens = o['dens'].astype(np.float32)
+            ph = o['ph1d'].astype(np.float32)
+            r = o['r1d'].astype(np.float32)
+            th = o['th1d'].astype(np.float32)
+
+            # clip radius to 100 Rsun
+            mask = r < 100
+            r = r[mask]
+            dens = dens[:, :, mask]
+
+            phi, theta, radius, t = np.meshgrid(ph + np.pi / 2, th, r, np.array([time]), indexing="ij")
+
+            x = radius * np.sin(theta) * np.cos(phi)
+            y = radius * np.sin(theta) * np.sin(phi)
+            z = radius * np.cos(theta)
+
+            query_points = np.stack([x, y, z, t], axis=-1, dtype=np.float32)
+            query_points = query_points[:, :, :, 0]
+
+            query_points = query_points.reshape(-1, 4)
+            dens = dens.reshape(-1)
+
+            self.validation_cube = TensorDataset({'query_points': torch.tensor(query_points, dtype=torch.float32),
+                                                  'density': torch.tensor(dens, dtype=torch.float32)})
+        else:
+            self.validation_88cube = None
+
         self.train_data = BatchesDataset(
             {'rays': self.train_rays, 'times': self.train_times, 'images': self.train_images},
             batch_size=self.batch_size)
@@ -123,8 +172,16 @@ class NeRFDataModule(LightningDataModule):
 
     def val_dataloader(self):
         # handle batching manually
-        return DataLoader(self.valid_data, batch_size=None, num_workers=self.num_workers, pin_memory=True,
-                          shuffle=False)
+        image_valid = DataLoader(self.valid_data, batch_size=None, num_workers=self.num_workers, pin_memory=True,
+                                 shuffle=False)
+        slice_valid = DataLoader(self.slice_valid_data, batch_size=None,
+                                 num_workers=self.num_workers, pin_memory=True, shuffle=False)
+        if self.validation_cube is not None:
+            validation_cube = DataLoader(self.validation_cube, batch_size=None,
+                                         num_workers=self.num_workers, pin_memory=True, shuffle=False)
+            return image_valid, slice_valid, validation_cube
+        else:
+            return image_valid, slice_valid
 
 
 class BatchesDataset(Dataset):
@@ -223,7 +280,7 @@ def _load_map_data(data):
                           s_map.dsun.to_value(u.R_sun) / Rs_per_ds).float().numpy()
 
     image = s_map.data.astype(np.float32)
-    img_coords = all_coordinates_from_map(s_map).transform_to(frames.Helioprojective)
+    img_coords = all_coordinates_from_map(s_map)
     all_rays = np.stack(get_rays(img_coords, pose), -2)
 
     # rays_o = all_rays[:, :, 0, :]

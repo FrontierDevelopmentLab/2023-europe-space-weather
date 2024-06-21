@@ -90,7 +90,7 @@ class SphericalSampler(torch.nn.Module):
         # solve quadratic equation --> find points at 1 solar radii
         a = rays_d.pow(2).sum(-1)
         b = (2 * rays_o * rays_d).sum(-1)
-        c = rays_o.pow(2).sum(-1) - 100 ** 2
+        c = rays_o.pow(2).sum(-1) - 130 ** 2
         dist_near = (-b - torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
         dist_far = (-b + torch.sqrt(b.pow(2) - 4 * a * c)) / (2 * a)
 

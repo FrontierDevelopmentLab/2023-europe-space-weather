@@ -2,16 +2,16 @@
 #   data_sim_type : 'hao' # simulated data (psi or hao)
 #   data_path : '/mnt/ground-data/data_fits/dcmer_0000_bang_0000_pB'
 
-path_to_save: "/glade/work/rjarolim/sunerf-cme/5view_v01"
-working_directory: '/glade/derecho/scratch/rjarolim/sunerf-cme/5view_v01'
+path_to_save: "/glade/work/rjarolim/sunerf-cme/1view_120_v01"
+working_directory: '/glade/derecho/scratch/rjarolim/sunerf-cme/1view_120_v01'
 wandb:
   entity: "ssa_live_twin"
   project: "sunerf-cme-test"
-  name: "5view_v01"
+  name: "1view_120_v01"
 
 data:
-  data_path_pB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_5/*pB*.fits"
-  data_path_tB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_5/*tB*.fits"
+  data_path_pB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_1view_120/*pB*.fits"
+  data_path_tB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_1view_120/*tB*.fits"
   debug: False
   Rs_per_ds: 1
   seconds_per_dt: 86400

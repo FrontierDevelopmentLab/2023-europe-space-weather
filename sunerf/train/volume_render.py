@@ -109,6 +109,7 @@ def nerf_forward(rays_o: torch.Tensor,
     return {'pixel_B': pixel_b,
             'density_map': density_map, 'distance_sun': height_map_sun, 'distance_obs': height_map_obs,
             'z_vals_stratified': sample_out['z_vals'], 'z_vals_hierarchical': hierarchical_out['z_vals'],
+            'v': raw[..., 1:], 'log_rho': raw[..., 0], 'query_points': flat_points,
             }
 
 

@@ -4,6 +4,8 @@ import numpy as np
 import torch
 from astropy import units as u
 from datetime import datetime
+
+from sunpy.map import Map, all_coordinates_from_map
 from sunpy.map.mapbase import PixelPair
 from torch import nn
 from torch.nn import DataParallel
@@ -38,6 +40,12 @@ class SuNeRFLoader:
         self.Mm_per_ds = self.Rs_per_ds * (1 * u.R_sun).to_value(u.Mm)
         self.ref_time = state['ref_time']
 
+        # TODO add
+        s_map = Map(
+            '/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_1view/dcmer_0000_bang_0000_pB_stepnum_005.fits')
+        self.img_coords = all_coordinates_from_map(s_map)
+        self.mask = ~np.isnan(s_map.data)
+
     @property
     def start_time(self):
         return self.unnormalize_datetime(np.min(self.times))
@@ -52,36 +60,43 @@ class SuNeRFLoader:
                             strides: int = 1, batch_size: int = 4096):
         with torch.no_grad():
             # convert to pose
-            target_pose = pose_spherical(-lon, lat, distance, center).numpy()
+            target_pose = pose_spherical(-np.deg2rad(lon), np.deg2rad(lat), distance, center).numpy()
             # load rays
-            ref_pixel = PixelPair(x=(self.resolution - 1) / 2 * u.pix,
-                                  y=(self.resolution - 1) / 2 * u.pix) if ref_pixel is None else ref_pixel
-            rays_o, rays_d = get_rays(self.resolution, self.resolution, ref_pixel, self.focal, target_pose)
+
+            mask = self.mask[::strides, ::strides]
+
+            rays_o, rays_d = get_rays(self.img_coords, target_pose)
             rays_o, rays_d = torch.from_numpy(rays_o), torch.from_numpy(rays_d)
             img_shape = rays_o[::strides, ::strides].shape[:2]
-            rays_o = rays_o[::strides, ::strides].reshape([-1, 3]).to(self.device)
-            rays_d = rays_d[::strides, ::strides].reshape([-1, 3]).to(self.device)
+            rays_o = rays_o[::strides, ::strides][mask].reshape([-1, 3]).to(self.device)
+            rays_d = rays_d[::strides, ::strides][mask].reshape([-1, 3]).to(self.device)
 
-            time = normalize_datetime(time, self.seconds_per_dt)
-            flat_time = (torch.ones(img_shape) * time).view((-1, 1)).to(self.device)
+            time = normalize_datetime(time, self.seconds_per_dt, self.ref_time)
+            flat_time = torch.ones_like(rays_o[:, 0:1]) * time
             # make batches
             rays_o, rays_d, time = torch.split(rays_o, batch_size), \
                                    torch.split(rays_d, batch_size), \
                                    torch.split(flat_time, batch_size)
 
-            outputs = {}
+
+
+            outputs = {"tB": [], "pB": [], "density_map": []}
             for b_rays_o, b_rays_d, b_time in zip(rays_o, rays_d, time):
                 b_outs = nerf_forward(b_rays_o, b_rays_d, b_time,
-                                      model=self.rho_model, sampler=self.sampler,
+                                      model=self.model, sampler=self.sampler,
                                       hierarchical_sampler=self.hierarchical_sampler,
                                       rendering=self.rendering)
-                for k in b_outs.keys():
-                    if k not in outputs:
-                        outputs[k] = []
-                    outputs[k] += [b_outs[k].cpu()]
-            outputs = {k: torch.cat(v).view(*img_shape, -1).numpy() for k, v in
-                       outputs.items()}
-            return outputs
+                outputs["tB"].append(b_outs["pixel_B"][..., 0].cpu())
+                outputs["pB"].append(b_outs["pixel_B"][..., 1].cpu())
+                outputs["density_map"].append(b_outs["density_map"].cpu())
+
+            results = {}
+            for key, val in outputs.items():
+                val = torch.cat(val).numpy()
+                img = np.ones(img_shape) * np.nan
+                img[mask] = val
+                results[key] = img
+            return results
 
     def normalize_datetime(self, time):
         return normalize_datetime(time, self.seconds_per_dt, self.ref_time)
@@ -99,56 +114,22 @@ class SuNeRFLoader:
 
         density_list = []
         velocity_list = []
-        continuity_loss_list = []
         for j in range(n_batches):
             batch = flat_query_points[j * batch_size:(j + 1) * batch_size].to(self.device)
-            batch.requires_grad = True
             out = self.model(batch)
 
             rho = 10 ** out[:, 0]
             velocity = out[:, 1:]
 
-            out = torch.cat([rho[..., None], velocity], 1)
-            jac_matrix = jacobian(out, batch)
-
-            dRho_dx = jac_matrix[:, 0, 0]
-            dVx_dx = jac_matrix[:, 1, 0]
-            dVy_dx = jac_matrix[:, 2, 0]
-            dVz_dx = jac_matrix[:, 3, 0]
-
-            dRho_dy = jac_matrix[:, 0, 1]
-            dVx_dy = jac_matrix[:, 1, 1]
-            dVy_dy = jac_matrix[:, 2, 1]
-            dVz_dy = jac_matrix[:, 3, 1]
-
-            dRho_dz = jac_matrix[:, 0, 2]
-            dVx_dz = jac_matrix[:, 1, 2]
-            dVy_dz = jac_matrix[:, 2, 2]
-            dVz_dz = jac_matrix[:, 3, 2]
-
-            dRho_dt = jac_matrix[:, 0, 3]
-            dVx_dt = jac_matrix[:, 1, 3]
-            dVy_dt = jac_matrix[:, 2, 3]
-            dVz_dt = jac_matrix[:, 3, 3]
-
-            div_v = (dVx_dx + dVy_dy + dVz_dz)
-            grad_rho = torch.stack([dRho_dx, dRho_dy, dRho_dz], -1)
-            v_dot_grad_rho = (velocity * grad_rho).sum(-1)
-            continuity_loss = dRho_dt + rho * div_v + v_dot_grad_rho
-            continuity_loss = continuity_loss.abs()
-
-            density = rho / (self.Mm_per_ds * 1e8) ** 3  # Ne/ds^3 --> Ne/cm^3
+            density = rho * 1.12e6 #/ (self.Mm_per_ds * 1e8) ** 3  # Ne/ds^3 --> Ne/cm^3
             velocity = velocity * (self.Mm_per_ds * 1e3) / self.seconds_per_dt  # km/s
 
             density_list.append(density.detach().cpu())
             velocity_list.append(velocity.detach().cpu())
-            continuity_loss_list.append(continuity_loss.detach().cpu())
 
         density = torch.cat(density_list, 0)
         velocity = torch.cat(velocity_list, 0)
-        continuity_loss = torch.cat(continuity_loss_list, 0)
 
         density = density.view(target_shape).numpy()
         velocity = velocity.view(target_shape + velocity.shape[-1:]).numpy()
-        continuity_loss = continuity_loss.view(target_shape).numpy()
-        return {'density': density, 'velocity': velocity, 'continuity_loss': continuity_loss}
+        return {'density': density, 'velocity': velocity}

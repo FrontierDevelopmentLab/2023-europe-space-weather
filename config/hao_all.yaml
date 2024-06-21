@@ -2,12 +2,12 @@
 #   data_sim_type : 'hao' # simulated data (psi or hao)
 #   data_path : '/mnt/ground-data/data_fits/dcmer_0000_bang_0000_pB'
 
-path_to_save: "/glade/work/rjarolim/sunerf-cme/all_v01"
-working_directory: '/glade/derecho/scratch/rjarolim/sunerf-cme/all_v01'
+path_to_save: "/glade/work/rjarolim/sunerf-cme/all_v04"
+working_directory: '/glade/derecho/scratch/rjarolim/sunerf-cme/all_v04'
 wandb:
   entity: "ssa_live_twin"
   project: "sunerf-cme-test"
-  name: "all_v01"
+  name: "all_v04"
 
 data:
   data_path_pB: "/glade/work/rjarolim/data/sunerf-cme/hao/prep-data/prep_HAO_all/*pB*.fits"
@@ -15,19 +15,20 @@ data:
   debug: False
   Rs_per_ds: 1
   seconds_per_dt: 86400
+  validation_cube: "/glade/work/rjarolim/data/sunerf-cme/hao/density_cube_v2/dens_stepnum_030.sav"
 
 sampling_config:
   n_samples: 64
-  near: -100
-  far: 100
+  near: -130
+  far: 130
 
 module:
   image_scaling_config: {vmin: -8, vmax: -4}
-  lambda_velocity_regularization: 0 #1.0e-2
+  lambda_velocity_regularization: 1.0e-2
   lambda_continuity: 1.0e-2
-  lambda_radial_regularization: 0 #1.0e-2
+  lambda_radial_regularization: 1.0e-2
   lambda_brightness: 10
   model_config: {encoding: 'positional'}
 
 train:
-  log_every_n_steps: 5000
+  log_every_n_steps: 2000

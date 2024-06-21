@@ -47,7 +47,7 @@ def _load_HAO(file_path):
 
     return Map(data, header)
 
-def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
+def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU, outer_rad = 110 * u.R_sun):
     """Load and preprocess PSI file.
 
     Parameters
@@ -73,7 +73,7 @@ def _loadMLprepMap(file_path, out_path, resolution, occ_rad=0.1 * u.AU):
     pixel_radii = np.sqrt((pixel_coords.Tx-solar_center.Tx)**2 + \
                       (pixel_coords.Ty-solar_center.Ty)**2)
     mask = ((pixel_radii < s_map.rsun_obs * occ_rad.to_value(u.R_sun)) |
-            (pixel_radii > s_map.rsun_obs * 100))
+            (pixel_radii > s_map.rsun_obs * outer_rad.to_value(u.R_sun)))
 
     
     data = s_map.data
