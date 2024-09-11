@@ -127,3 +127,5 @@ python -m pytest test
 Dependencies are specified in the `pyproject` file. Only add dependencies which are required by the project to avoid bloated environments. Add _universal_ dependencies (like Pytorch) in the `[project]` section.
 
 Add optional dependencies for the different toolsets in `[project.optional-dependencies]`.
+
+This work has been enabled by Frontier Development Lab Europe (https://fdleurope.org) a public / private partnership between the European Space Agency (ESA), Trillium Technologies, the University of Oxford and leaders in commercial AI supported by Google Cloud and Nvidia, developing open science for all Humankind.   
